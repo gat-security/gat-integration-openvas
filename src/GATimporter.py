@@ -63,12 +63,13 @@ def extract_solution_data(data):
     return result.strip()
 
 
-def gat_importer(filename, connection, script_path, on_premise, active_tags_list, allow_list_flag, max_vulnerabilities, max_vulnerabilities_per_file):
+def GATimporter(filename, connection, script_path, isOnpremise, active_tags_list, allow_list_flag, max_vulnerabilities, max_vulnerabilities_per_file):
 
-    print("Is on premise? {}".format(on_premise))
+    print("Is on premise? {}".format(isOnpremise))
     print("GAT URL: {}".format(connection.gat_url))
 
-    if on_premise:
+    # TODO : Sendo on-premise os certificados aplicados são auto-assinados
+    if isOnpremise:
         requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
     file_path = script_path + 'xmls/' + filename + '.xml'
@@ -659,7 +660,7 @@ def check_if_scan_is_finished(connection, bearer, scan_id, is_onpremise):
     return response
 
 
-def upload_all_scan_files(connection, version, filename, script_path, filepath, on_premise, company_id):
+def upload_all_scan_files(connection, version, filename, script_path, filepath, isOnpremise, company_id):
 
     hora_log = str(datetime.now()).replace(":", "-").replace(" ", "T")
     log_file = open(script_path + "log_{}{}.txt".format(filename, hora_log), "a", newline='')
@@ -716,15 +717,14 @@ def upload_all_scan_files(connection, version, filename, script_path, filepath, 
                                 'cache-control': "no-cache"
                             }
 
-                        if on_premise:
+                        if isOnpremise:
                             proxies = {"http": "", "https": ""}
-                            r = s.request('POST', gat_point, files=file_dict, verify=not on_premise, proxies=proxies)
+                            r = s.request('POST', gat_point, files=file_dict, verify=not isOnpremise, proxies=proxies)
                         else:
-                            r = s.request('POST', gat_point, files=file_dict, verify=not on_premise)
+                            r = s.request('POST', gat_point, files=file_dict, verify=not isOnpremise)
 
                         upload_response_text = r.text
                         response = json.loads(r.text)
-                        print(response)
                         print("Scan ID gerado: {}".format(response['scan_id']))
                         print("{} - {}".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
                         log_file.write("\t\t{} - {}\n".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
@@ -733,7 +733,7 @@ def upload_all_scan_files(connection, version, filename, script_path, filepath, 
                         count_max_sleep = 30 #Quantidade de vezes máximas que o código pode dormir
                         count_current_sleep = 0
                         while scan_is_finished is False:
-                            scan_check = check_if_scan_is_finished(connection, bearer, response['scan_id'], on_premise)
+                            scan_check = check_if_scan_is_finished(connection, bearer, response['scan_id'], isOnpremise)
                             if scan_check['status'] == "COMPLETED" or scan_check['status'] == "ERROR":
                                 scan_is_finished = True
                             else:
@@ -749,8 +749,8 @@ def upload_all_scan_files(connection, version, filename, script_path, filepath, 
                             write_xml_hash(filename, script_path, company_id)
                             os.remove(script_path + 'xmls/' + filename + '.xml')
 
-                        #if os.path.exists(filepath):
-                        #    os.remove(filepath)
+                        if os.path.exists(filepath):
+                            os.remove(filepath)
 
                         if os.path.exists(file_and_path_compressed):
                             os.remove(file_and_path_compressed)
@@ -770,7 +770,7 @@ def upload_all_scan_files(connection, version, filename, script_path, filepath, 
             if scan_upload_current_try > scan_upload_max_number_of_retries:
                 scan_is_finished = True
 
-        print("Upload e verificação do Scan confirmado, vamos aguardar 120 segundos antes de iniciarmos o próximo")
+        print("Upload e verificação do Scan confirmado, vamos aguardar 2 minutos antes de iniciarmos o próximo")
         time.sleep(120)
 
     except Exception as e:

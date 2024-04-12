@@ -7,7 +7,7 @@ from gvm.connections import UnixSocketConnection
 from gvm.errors import GvmError
 from gvm.protocols.gmp import Gmp
 from gvm.transforms import EtreeCheckCommandTransform
-import gat_importer as gat
+import GATimporter as gat
 
 class Credential:
     def __init__(self, gat_url, gat_token, custom_parser_name):
@@ -39,9 +39,9 @@ def main():
     connection = UnixSocketConnection(path=path)
     transform = EtreeCheckCommandTransform()
 
-    username = os.getenv('GAT_SCAN_USERNAME')
-    password = os.getenv('GAT_SCAN_PASSWORD')
-    on_premise = os.getenv('ONPREMISE')
+    username = os.getenv('OPENVAS_USERNAME')
+    password = os.getenv('OPENVAS_PASSWORD')
+    isOnpremise = os.getenv('ONPREMISE')
 
     csv_path = '/app/csvs/'
     csv_filename = 'report.csv'
@@ -66,9 +66,6 @@ def main():
 
             tree = ElementTree.parse(xml_file_path)
             root = tree.getroot()
-            
-            report_id = root.find('./report').get('id') if root.find('./report') is not None else ''
-            print(report_id)
 
             with open(csv_file_path, 'w', newline='', encoding='utf-8') as csv_file:
                 csv_writer = csv.writer(csv_file, delimiter=';', quoting=csv.QUOTE_ALL)
@@ -76,53 +73,44 @@ def main():
 
                 for result in root.findall('.//result'):
                     port_protocol = result.find('port').text.split('/')
-                    port = re.findall(r'\d+', port_protocol[0])[0] if len(port_protocol) > 0 and re.findall(r'\d+', port_protocol[0]) else '0'
+                    port = port_protocol[0] if len(port_protocol) > 0 else ''
                     protocol = port_protocol[1].upper() if len(port_protocol) > 1 else ''
+                    row = [
+                        result.find('host').text,
+                        port,
+                        protocol,
+                        '',
+                        '',
+                        '',
+                        result.find('nvt').get('oid'),
+                        result.find('nvt/name').text,
+                        result.find('severity').text,
+                        result.find('nvt/cvss_base').text if result.find('nvt/cvss_base') is not None else '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        result.find('creation_time').text,
+                        result.find('modification_time').text,
+                        '',
+                        troca_aspas(result.find('nvt/tags').text),
+                        '',
+                        result.find('nvt/solution').text if result.find('nvt/solution') is not None else '',
+                        result.find('host/hostname').text if result.find('host/hostname') is not None else '',
+                        '',
+                        ''
+                    ]
+                    row.extend(extrai_referencias(result.findall('nvt/refs/ref')))
+                    csv_writer.writerow(row)
                     
-                    description_text = result.find('description').text
-                    description_parts = description_text.split('|')
-                    os_info = description_parts[1].strip() if len(description_parts) > 1 else ''
-                    
-                    threat = result.find('threat').text
-                    if threat != 'Log':                    
-                        row = [
-                            result.find('host').text,
-                            port,
-                            protocol,
-                            os_info,
-                            '',
-                            '',
-                            result.find('nvt').get('oid'),
-                            result.find('nvt/name').text,
-                            threat,
-                            result.find('nvt/cvss_base').text if result.find('nvt/cvss_base') is not None else '',
-                            '',
-                            '',
-                            '',
-                            '',
-                            result.find('creation_time').text,
-                            result.find('modification_time').text,
-                            '',
-                            troca_aspas(result.find('nvt/tags').text),
-                            '',
-                            'Tester',
-                            result.find('host/hostname').text if result.find('host/hostname') is not None else '',
-                            '',
-                            ''
-                        ]
-                        row.extend(extrai_referencias(result.findall('nvt/refs/ref')))
-                        csv_writer.writerow(row)
-                        
-            #gmp.delete_report(report_id) 
-            
         credential = Credential(
             gat_url=os.getenv('GAT_URL'),
             gat_token=os.getenv('GAT_TOKEN'),
-            custom_parser_name='rapid7'
+            custom_parser_name=csv_filename
         )
-        version = "1.0"
+        version = "2.0"
 
-        gat.upload_all_scan_files(credential, version, csv_filename, csv_path, csv_file_path, on_premise, 1)
+        gat.upload_all_scan_files(credential, version, csv_filename, csv_path, csv_file_path, isOnpremise, 1)
 
         print("success")
 
