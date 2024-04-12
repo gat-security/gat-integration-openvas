@@ -1,4 +1,5 @@
-openvas_lib
 requests
 python-gvm
 py7zr
+pytz
+icalendar

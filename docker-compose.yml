@@ -75,8 +75,8 @@ services:
       - psql_socket_vol:/var/run/postgresql
       - ./src:/app
     environment:
-      OPENVAS_USERNAME: "${OPENVAS_USERNAME}"
-      OPENVAS_PASSWORD: "${OPENVAS_PASSWORD}"
+      GAT_SCAN_USERNAME: "${GAT_SCAN_USERNAME}"
+      GAT_SCAN_PASSWORD: "${GAT_SCAN_PASSWORD}"
       GAT_URL: "${GAT_URL}"
       GAT_TOKEN: "${GAT_TOKEN}"
       ONPREMISE: "${ONPREMISE}"

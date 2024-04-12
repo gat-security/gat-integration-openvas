@@ -1,0 +1,15 @@
+"address";"port";"protocol";"os";"certainty";"test_status";"id";"title";"severity";"cvssScore";"malware";"exploit_id";"exploit_title";"published";"added";"modified";"riskScore";"description";"tags";"solution";"hostname";"netbios";"root_cause";"REFERENCE TITLE 1";"REFERENCE URL 1";"REFERENCE TITLE 2";"REFERENCE URL 2";"REFERENCE TITLE 3";"REFERENCE URL 3";"REFERENCE TITLE 4";"REFERENCE URL 4";"REFERENCE TITLE 5";"REFERENCE URL 5";"REFERENCE TITLE 6";"REFERENCE URL 6";"REFERENCE TITLE 7";"REFERENCE URL 7";"REFERENCE TITLE 8";"REFERENCE URL 8";"REFERENCE TITLE 9";"REFERENCE URL 9";"REFERENCE TITLE 10";"REFERENCE URL 10";"REFERENCE TITLE 11";"REFERENCE URL 11";"REFERENCE TITLE 12";"REFERENCE URL 12";"REFERENCE TITLE 13";"REFERENCE URL 13";"REFERENCE TITLE 14";"REFERENCE URL 14";"REFERENCE TITLE 15";"REFERENCE URL 15";"REFERENCE TITLE 16";"REFERENCE URL 16"
+"192.168.31.187";"80";"TCP";"";"";"";"1.3.6.1.4.1.25623.1.0.108440";"Cleartext Transmission of Sensitive Information via HTTP";"Medium";"4.8";"";"";"";"";"2024-04-10T16:57:29-03:00";"2024-04-10T16:57:29-03:00";"";"cvss_base_vector=AV:A/AC:L/Au:N/C:P/I:P/A:N|summary=The host / application transmits sensitive information (username, passwords) in
+  cleartext via HTTP.|insight=|affected=Hosts / applications which doesn't enforce the transmission of sensitive data via an
+  encrypted SSL/TLS connection.|impact=An attacker could use this situation to compromise or eavesdrop on the
+  HTTP communication between the client and the server using a man-in-the-middle attack to get access to
+  sensitive data like usernames or passwords.|solution=Enforce the transmission of sensitive data via an encrypted SSL/TLS connection.
+  Additionally make sure the host / application is redirecting all users to the secured SSL/TLS connection before
+  allowing to input sensitive data into the mentioned functions.|vuldetect=Evaluate previous collected information and check if the host / application is not
+  enforcing the transmission of sensitive data via an encrypted SSL/TLS connection.
+
+  The script is currently checking the following:
+
+  - HTTP Basic Authentication (Basic Auth)
+
+  - HTTP Forms (e.g. Login) with input field of type 'password'|solution_type=Workaround";"";"Tester";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";"";""
