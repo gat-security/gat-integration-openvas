@@ -1,0 +1,6 @@
+requests
+python-gvm
+py7zr
+pytz
+icalendar
+python-nmap

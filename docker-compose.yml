@@ -75,11 +75,17 @@ services:
       - psql_socket_vol:/var/run/postgresql
       - ./src:/app
     environment:
-      OPENVAS_USERNAME: "${OPENVAS_USERNAME}"
-      OPENVAS_PASSWORD: "${OPENVAS_PASSWORD}"
+      GAT_SCAN_USERNAME: "${GAT_SCAN_USERNAME}"
+      GAT_SCAN_PASSWORD: "${GAT_SCAN_PASSWORD}"
       GAT_URL: "${GAT_URL}"
       GAT_TOKEN: "${GAT_TOKEN}"
       ONPREMISE: "${ONPREMISE}"
+      EXECUTE_NOW: "${EXECUTE_NOW}"
+      SCHEDULE_TYPE: "${SCHEDULE_TYPE}"
+      SCHEDULE_TIME: "${SCHEDULE_TIME}"
+      SCHEDULE_FIRST_DATE: "${SCHEDULE_FIRST_DATE}"
+      TIMEZONE: "${TIMEZONE}"
+      QOD: "${QOD}"
     depends_on:
       pg-gvm:
         condition: service_started
