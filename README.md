@@ -4,23 +4,23 @@ Este projeto configura e executa o Greenbone Community Edition usando Docker. El
 
 ## Pré-requisitos
 
-- Docker
-- Docker Compose
+- Docker (https://docs.docker.com/engine/install/)
+- Docker Compose (https://docs.docker.com/compose/install/)
 
 ### Recomendado
 - CPU Cores: 4
 - Random-Access Memory: 8Gb
 - Hard Disk: 60Gb
 
-## Documentação para instalação do Greenbone Community
+## Documentação para instalação do Greenbone Community (antigo Openvas)
 https://greenbone.github.io/docs/latest/22.4/container/index.html
 
 ## Configuração
 
 1. Clone este repositório:
    ```sh
-   git clone https://github.com/danilofranco/integra-openvas-gatcore.git
-   cd integra-openvas-gatcore
+   git clone https://github.com/gat-security/gat-integration-openvas
+   cd gat-integration-openvas
    ```
    
 2. Defina o escopo dentro do arquivo `src/hosts`
@@ -31,20 +31,21 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 
 3. Defina as variáveis de ambiente necessárias no arquivo `.env` na raiz do projeto:
 
-- GAT_SCAN_USERNAME: usuário do GAT Scan. Default: admin
-- GAT_SCAN_PASSWORD: senha a ser configurada no GAT Scan 
-- GAT_URL: url do ambiente do GAT Core
-- GAT_TOKEN: token para integração com o GAT Core sem o Bearer (https://www.gatinfosec.com/central-de-suporte/api-gat-core/)
+- OPENVAS_USERNAME: Usuário do Greenbone Community. Default: admin
+- OPENVAS_PASSWORD: Senha a ser configurada no Greenbone Community 
+- GAT_URL: Url do ambiente do GAT Core
+- GAT_TOKEN: Token para integração com o GAT Core sem o Bearer (https://www.gatinfosec.com/central-de-suporte/api-gat-core/)
 - ONPREMISE: True ou False para GAT Core na versão On premise
 - SCHEDULE_TYPE: Frequência de execução do scan (Once, Hourly, Daily, Weekly, Monthly, Yearly)
 - SCHEDULE_TIME: Horário da execução
 - SCHEDULE_FIRST_DATE: Data da primeira execução (Ano-mês-dia). Ex. 2024-04-01
-- TIMEZONE: horário mundial Ex.:America/Sao_Paulo
+- TIMEZONE: Horário mundial Ex.:America/Sao_Paulo
+- QOD: Descreve a confiabilidade da detecção de vulnerabilidade executada ou detecção de produto. (https://docs.greenbone.net/GSM-Manual/gos-20.08/en/reports.html#quality-of-detection-concept)
 - EXECUTE_NOW: se executará o scanner logo após concluir a configuração
 
    ```
-   GAT_SCAN_USERNAME=admin
-   GAT_SCAN_PASSWORD=your_password
+   OPENVAS_USERNAME=admin
+   OPENVAS_PASSWORD=your_password
    GAT_URL=https://your_gat_url
    GAT_TOKEN=your_gat_token
    ONPREMISE=False
@@ -52,6 +53,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
    SCHEDULE_TIME=12:00
    SCHEDULE_FIRST_DATE=2024-04-01
    TIMEZONE=America/Sao_Paulo
+   QOD=30
    EXECUTE_NOW=True
    ```
 
@@ -61,7 +63,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 
    docker compose -f docker-compose.yml -p greenbone-community-edition exec -u gvmd gvmd gvmd --user=admin --new-password='<password>'
 
-   docker exec -it greenbone-community-edition-gvmd-1 python3 app/configure.py
+   docker compose -f docker-compose.yml -p greenbone-community-edition exec gvmd python3 app/configure.py
    ```
    > Substituir o "password" pela senha a mesma senha do .env
 
@@ -72,7 +74,10 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
    docker compose -f docker-compose.yml -p greenbone-community-edition up -d
    ```
 ## Uso
-O script Python `main.py` é executado a cada hora pelo cron job no container `gvmd`. Ele gera um relatório de varredura em formato XML, converte-o para CSV e envia para a API do GAT Core.
+É preciso criar um cronjob ou tarefa agendada para executar o comando abaixo, aconselhamos registrar a execução a cada 1 hora. Ele gera um relatório de varredura em formato XML, converte-o para CSV e envia para a API do GAT Core.
+   ```sh
+   docker compose -f docker-compose.yml -p greenbone-community-edition exec gvmd python3 app/main.py
+   ```
 
 ## Estrutura de Arquivos
 

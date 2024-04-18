@@ -64,8 +64,8 @@ def main():
     connection = UnixSocketConnection(path=path)
     transform = EtreeCheckCommandTransform()
 
-    username = os.getenv('GAT_SCAN_USERNAME')
-    password = os.getenv('GAT_SCAN_PASSWORD')
+    username = os.getenv('OPENVAS_USERNAME')
+    password = os.getenv('OPENVAS_PASSWORD')
     on_premise = os.getenv('ONPREMISE')
 
     csv_path = '/app/csvs/'
@@ -73,7 +73,7 @@ def main():
     credential = Credential(
         gat_url=os.getenv('GAT_URL'),
         gat_token=os.getenv('GAT_TOKEN'),
-        custom_parser_name='greenbone6'
+        custom_parser_name='gatscan'
     )
     version = "1.0"
 

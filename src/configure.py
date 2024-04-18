@@ -95,14 +95,14 @@ def main():
     try:
         with Gmp(connection=connection, transform=transform) as gmp:
             print('Iniciando...')
-            gmp.authenticate(os.getenv('GAT_SCAN_USERNAME'), os.getenv('GAT_SCAN_PASSWORD'))
+            gmp.authenticate(os.getenv('OPENVAS_USERNAME'), os.getenv('OPENVAS_PASSWORD'))
 
             scanner_id = get_scanner_id(gmp)
             config_id = get_config_id(gmp)
             schedule_id = get_schedule_id(gmp, schedule_type, schedule_date, schedule_time)
 
             if not scanner_id or not config_id:
-                print('Error: Scanner ID or Config ID not found')
+                print('Error: Scanner ID ou Config ID não encontrado')
                 return
 
             with open('/app/hosts', 'r') as file:
@@ -112,14 +112,14 @@ def main():
                         target_id = create_target(gmp, host)
                         if target_id:
                             task_id = create_task(gmp, target_id, config_id, scanner_id, schedule_id)
-                            if execute_now == True:
+                            if execute_now == 'True':
                                 execute_task(gmp, task_id)                            
-                            print(f'Task created with ID: {task_id}')
+                            print(f'Task ID: {task_id}')
                         else:
                             print(f'Failed to create target for {host}')
 
     except GvmError as e:
-        print('An error occurred:', e, file=sys.stderr)
+        print('Um erro ocorreu:', e, file=sys.stderr)
 
 if __name__ == '__main__':
     main()

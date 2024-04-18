@@ -2,13 +2,10 @@ FROM greenbone/gvmd:stable
 
 # Instalar dependências
 RUN apt-get update && \
-    apt-get install -y python3.10 python3-pip cron nmap
+    apt-get install -y python3.10 python3-pip cron
 
-# Instalar python-gvm
-RUN pip3 install requests python-gvm py7zr pytz icalendar python-nmap
+# Instalar dependências
+RUN pip3 install requests python-gvm py7zr pytz icalendar
 
 # Criar um script para configurar o cron job
-RUN echo "0 * * * * root python3 /app/main.py" >> /etc/crontab
-
-# Comando para iniciar o gvmd e o cron
-CMD ["sh", "-c", "cron && gvmd --foreground"]
+RUN echo "0 * * * * gvmd python3 /app/main.py" >> /etc/crontab
