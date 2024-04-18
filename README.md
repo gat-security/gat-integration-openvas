@@ -12,10 +12,10 @@ Este projeto configura e executa o Greenbone Community Edition usando Docker. El
 - Random-Access Memory: 8Gb
 - Hard Disk: 60Gb
 
-## Documentação para instalação do Greenbone Community (antigo Openvas)
+## Documentação do Greenbone Community (antigo Openvas)
 https://greenbone.github.io/docs/latest/22.4/container/index.html
 
-## Configuração
+## Instalação e Configuração
 
 1. Clone este repositório:
    ```sh
@@ -89,13 +89,6 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 - `src/main.py`: Script Python para gerar e enviar relatórios de varredura.
 - `src/csvs`: Pasta onde serão armazenados os arquivos csv de results do scanner de vulnerabilidade.
 - `src/xmls`: Pasta onde serão armazenados os arquivos xml de results do scanner de vulnerabilidade.
-
-## Limpeza
-
-Para parar e remover todos os contêineres e volumes criados pelo Docker Compose, execute:
-```
-docker-compose down -v
-```
 
 ## Notas
 
