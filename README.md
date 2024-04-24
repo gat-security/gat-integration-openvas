@@ -61,13 +61,18 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
    ```sh
    docker compose -f docker-compose.yml -p greenbone-community-edition up -d --build
 
-   docker compose -f docker-compose.yml -p greenbone-community-edition exec -u gvmd gvmd gvmd --user=admin --new-password='<password>'
+   docker compose -f docker-compose.yml -p greenbone-community-edition exec -u gvmd gvmd gvmd --user=admin --new-password='password'
 
    docker compose -f docker-compose.yml -p greenbone-community-edition exec gvmd python3 app/configure.py
    ```
    > Substituir o "password" pela senha a mesma senha do .env
 
-5. Em caso de necessidade de atualizar os containers
+5. Caso seja necessário reiniciar os containers
+   ```sh
+   docker compose -f docker-compose.yml -p greenbone-community-edition restart
+   ```
+
+6. Em caso de necessidade de atualizar os containers
    ```sh
    docker compose -f docker-compose.yml -p greenbone-community-edition pull
 

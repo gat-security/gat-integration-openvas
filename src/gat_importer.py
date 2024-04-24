@@ -137,7 +137,7 @@ def check_if_scan_is_finished(connection, bearer, scan_id, is_onpremise):
 
     endpoint_api = "{}://{}{}".format(protocol, url, resource)
 
-    if is_onpremise:
+    if is_onpremise.lower() == 'true':
         proxies = {"http": "", "https": ""}
         r = s.request('GET', endpoint_api, verify=not is_onpremise, proxies=proxies)
     else:

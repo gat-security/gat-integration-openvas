@@ -112,7 +112,7 @@ def main():
                         target_id = create_target(gmp, host)
                         if target_id:
                             task_id = create_task(gmp, target_id, config_id, scanner_id, schedule_id)
-                            if execute_now == 'True':
+                            if execute_now.lower() == 'true':
                                 execute_task(gmp, task_id)                            
                             print(f'Task ID: {task_id}')
                         else:

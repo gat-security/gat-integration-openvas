@@ -16,10 +16,11 @@ class Credential:
         self.custom_parser_name = custom_parser_name
 
 def get_reports_csv(gmp, report_ids, csv_results_id):
+    qod_value = os.getenv('QOD', '30')
     for report_id in report_ids:
         # Chama a função get_report para cada ID com os parâmetros apropriados
         response = gmp.get_report(report_id,
-                                  filter_string='apply_overrides=0 levels=hml min_qod=30',
+                                  filter_string=f'apply_overrides=0 levels=hml min_qod={qod_value}',
                                   report_format_id=csv_results_id,
                                   ignore_pagination=True,  
                                   details=True) 
