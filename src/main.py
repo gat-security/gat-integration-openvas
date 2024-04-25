@@ -90,9 +90,15 @@ def main():
 
             reports = gmp.get_reports(details=False, ignore_pagination=True)
             report_response_str = ElementTree.tostring(reports, encoding='unicode')
+            
             root = ElementTree.fromstring(report_response_str)
-            report_ids = [report.get('id') for report in root.findall('.//report')]
+            report_ids = []
+            for report in root.findall('.//report'):
+                scan_status = report.find('scan_run_status')
+                if scan_status is not None and scan_status.text == 'Done':
+                    report_ids.append(report.get('id'))
             unique_report_ids = list(set(report_ids))
+            
             get_reports_csv(gmp, unique_report_ids, csv_results_id)
                                     
             for filename in os.listdir(csv_path):

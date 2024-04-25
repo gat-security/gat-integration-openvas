@@ -52,24 +52,41 @@ def get_config_id(gmp, config_name='Full and fast'):
 def get_schedule_id(gmp, schedule_type, schedule_date, schedule_time):
     timezone = os.getenv('TIMEZONE', 'UTC')
     ical_data = generate_ical(schedule_type, schedule_date, schedule_time, timezone)
+    name = f"Schedule {schedule_type} at {schedule_time} on {schedule_date} ({timezone})"
+    
+    schedules_response = gmp.get_schedules()
+    for schedule in schedules_response.findall('schedule'):
+        if schedule.find('name').text == name:
+            print(f"Agendamento '{name}' já existe. ID: {schedule.get('id')}")
+            return schedule.get('id')
+        
     schedule_response = gmp.create_schedule(
         name=f"Schedule {schedule_type} at {schedule_time} on {schedule_date} ({timezone})",
         icalendar=ical_data,
         timezone=timezone
     )
+    print(f"Agendamento '{name}' criado com sucesso. ID: {schedule_response.get('id')}")
     return schedule_response.get('id')
 
 def create_target(gmp, host):
-    target_name = f"Target: {host}"
+    target_name = host
+    
+    targets_response = gmp.get_targets()
+    for target in targets_response.findall('target'):
+        if target.find('name').text == target_name:
+            print(f"Target '{target_name}' já existe. ID: {target.get('id')}")
+            return target.get('id')
+        
     target_response = gmp.create_target(
         name=target_name,
         hosts=[host],
         port_range='1-65000' 
     )
+    print(f"Target '{target_name}' criado com sucesso. ID: {target_response.get('id')}")
     return target_response.get('id')
 
 def create_task(gmp, target_id, config_id, scanner_id, schedule_id):
-    task_name = f"Task for Target: {target_id}"
+    task_name = f"Scanner: {target_id}"
     task_response = gmp.create_task(
         name=task_name,
         config_id=config_id,

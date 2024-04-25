@@ -78,8 +78,8 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 
    docker compose -f docker-compose.yml -p greenbone-community-edition up -d
    ```
-## Uso
-É preciso criar um cronjob ou tarefa agendada para executar o comando abaixo, aconselhamos registrar a execução a cada 1 hora. Ele gera um relatório de varredura em formato XML, converte-o para CSV e envia para a API do GAT Core.
+## Execução
+É preciso criar um cronjob ou tarefa agendada para executar o comando abaixo, aconselhamos registrar a execução a cada 1 hora. Ele gera um relatório em CSV e envia para a API do GAT Core.
    ```sh
    docker compose -f docker-compose.yml -p greenbone-community-edition exec gvmd python3 app/main.py
    ```
