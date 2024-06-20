@@ -207,9 +207,8 @@ def upload_all_scan_files(connection, version, filename, script_path, filepath, 
 
                         upload_response_text = r.text
                         response = json.loads(r.text)
-                        print(response)
                         print("Scan ID gerado: {}".format(response['scan_id']))
-                        print("{} - {}".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
+                        #print("{} - {}".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
                         log_file.write("\t\t{} - {}\n".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
 
                         time_to_wait = 15 #Em segundos

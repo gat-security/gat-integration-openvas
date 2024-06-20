@@ -1,13 +1,20 @@
 import sys
 import csv
 import os
+import time
+import pytz
+import base64
+import gzip
+import shutil
+import requests
+import gat_importer as gat
 import xml.etree.ElementTree as ElementTree
 from gvm.connections import UnixSocketConnection
 from gvm.errors import GvmError
 from gvm.protocols.gmp import Gmp
 from gvm.transforms import EtreeCheckCommandTransform
-import gat_importer as gat
-import base64
+from datetime import datetime
+
 
 class Credential:
     def __init__(self, gat_url, gat_token, custom_parser_name):
@@ -58,9 +65,80 @@ def get_reports_csv(gmp, report_ids, csv_results_id):
     
 def delete_reports(gmp, report_ids):
     for report_id in report_ids:
-        gmp.delete_report(report_id)  
+        gmp.delete_report(report_id)     
 
+def load_epss_data(epss_file):
+    epss_data = {}
+    with open(epss_file, 'r', encoding='utf-8') as file:
+        next(file)
+        csv_reader = csv.DictReader(file)
+        for row in csv_reader:
+            epss_data[row['cve']] = float(row['epss'])
+    return epss_data
+
+def classify_severity(epss):
+    if epss < 0.10:
+        return "Low", "EPSS < 10%"
+    elif epss < 0.75:
+        return "Medium", "EPSS > 10% e < 75%"
+    elif epss < 0.90:
+        return "High", "EPSS > 75% e < 90%"
+    else:
+        return "Critical", "EPSS > 90%"
+
+def download_and_extract_epss_data(output_folder):
+    today = datetime.now().strftime('%Y-%m-%d')
+    url = f"https://epss.cyentia.com/epss_scores-{today}.csv.gz"
+    filename_gz = f"epss_scores-{today}.csv.gz"
+    filename_csv = f"epss_scores-{today}.csv"
+
+    file_path_gz = os.path.join(output_folder, filename_gz)
+    file_path_csv = os.path.join(output_folder, filename_csv)
+
+    if os.path.exists(file_path_csv):
+        print("Arquivo já existe. Download ignorado.")
+        return file_path_csv
+
+    print(f"Baixando o arquivo {filename_gz}")
+    response = requests.get(url)
+    response.raise_for_status()
+
+    with open(file_path_gz, 'wb') as f:
+        f.write(response.content)
+    print("Download concluído.")
+
+    print(f"Descompactando o arquivo {filename_gz} para {filename_csv}")
+    with gzip.open(file_path_gz, 'rb') as f_in:
+        with open(file_path_csv, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    print("Descompactação concluída.")
+
+    cleanup_files(output_folder, filename_csv)
+
+    return file_path_csv
+
+def cleanup_files(output_folder, keep_file):
+    for file in os.listdir(output_folder):
+        file_path = os.path.join(output_folder, file)
+        if file != keep_file:
+            os.remove(file_path)
+            print(f"Removido: {file_path}")
+    
 def main():
+    local_timezone = pytz.timezone(os.getenv('TIMEZONE', 'UTC'))
+    today = datetime.now(local_timezone).strftime('%Y-%m-%d')
+    
+    epss_file_path = f'/app/epss/epss_scores-{today}.csv'
+    if not os.path.exists(epss_file_path):
+        print(f"Arquivo {epss_file_path} não encontrado. Baixando e extraindo dados EPSS.")
+        os.makedirs('/app/epss', exist_ok=True)
+        epss_file_path = download_and_extract_epss_data('/app/epss')
+        time.sleep(10)    
+        
+    epss_data = {}
+    if 'EPSS' in os.environ:
+        epss_data = load_epss_data(epss_file_path)
+  
     path = '/run/gvmd/gvmd.sock'
     connection = UnixSocketConnection(path=path)
     transform = EtreeCheckCommandTransform()
@@ -122,16 +200,25 @@ def main():
                                 vulnerability_insights = f"<br/><br/>Vulnerability Insights: {row[20]}" if row[20] else ""
                                 vulnerability_method = f"<br/><br/>Vulnerability Detection Method: {row[21]}" if row[21] else ""
                                 row[9] = f"{row[9]}{impact_info}{vulnerability_insights}{vulnerability_method}"
-                                row.append(row[18])
+                                row.append(row[18])  
+                                row[14] = ''                              
                                 if not row[2]:
                                     row[2] = 0
                                 if not row[3]:
-                                    row[3] = 'tcp'
+                                    row[3] = 'tcp'    
+                                if row[12]:
+                                    cve_list = row[12].split(',')
+                                    cve = cve_list[0]
+                                    if 'EPSS' in os.environ and cve in epss_data:
+                                        epss_score = epss_data[cve]
+                                        severity, tag = classify_severity(epss_score)
+                                        #row[5] = severity
+                                        row[14] = tag
                                 csv_writer.writerow(['OpenVAS']+row)
 
                     print(f"Arquivo {filename} processado com sucesso.\n")
                     gat.upload_all_scan_files(credential, version, filename_without_extension, csv_path, os.path.join(csv_path, filename), on_premise, 1)
-            delete_reports(gmp, unique_report_ids)        
+            # delete_reports(gmp, unique_report_ids)        
         print("Execução concluída.\n")
 
     except GvmError as e:

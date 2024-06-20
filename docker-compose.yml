@@ -86,6 +86,7 @@ services:
       SCHEDULE_FIRST_DATE: "${SCHEDULE_FIRST_DATE}"
       TIMEZONE: "${TIMEZONE}"
       QOD: "${QOD}"
+      EPSS: "${EPSS}"
     depends_on:
       pg-gvm:
         condition: service_started

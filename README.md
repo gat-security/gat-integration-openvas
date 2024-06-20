@@ -42,6 +42,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 - TIMEZONE: Horário mundial Ex.:America/Sao_Paulo
 - QOD: Descreve a confiabilidade da detecção de vulnerabilidade executada ou detecção de produto. (https://docs.greenbone.net/GSM-Manual/gos-20.08/en/reports.html#quality-of-detection-concept)
 - EXECUTE_NOW: se executará o scanner logo após concluir a configuração
+- EPSS: define se utilizará o EPSS para reclassificar a vulnerabilidade
 
    ```
    OPENVAS_USERNAME=admin
@@ -55,6 +56,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
    TIMEZONE=America/Sao_Paulo
    QOD=30
    EXECUTE_NOW=True
+   EPSS=True
    ```
 
 4. Construa e inicie os contêineres:
@@ -94,6 +96,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 - `src/main.py`: Script Python para gerar e enviar relatórios de varredura.
 - `src/csvs`: Pasta onde serão armazenados os arquivos csv de results do scanner de vulnerabilidade.
 - `src/xmls`: Pasta onde serão armazenados os arquivos xml de results do scanner de vulnerabilidade.
+- `src/epss/epss.csv`: Arquivo CSV com dados EPSS para reclassificação de vulnerabilidades.
 
 ## Notas
 
