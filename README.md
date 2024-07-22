@@ -1,6 +1,20 @@
-# Greenbone Community Edition Docker Compose
+# Integração GAT Scan com priorização- GAT Core x Greenbone Community (antigo Openvas) 
 
-Este projeto configura e executa o Greenbone Community Edition usando Docker. Ele inclui todos os serviços necessários para executar o Greenbone Community Edition, bem como integra o resultado ao GAT Core.
+Este projeto configura e executa o Greenbone Community Edition usando Docker. Ele inclui todos os serviços necessários para executar o Greenbone Community Edition, bem como integrar o resultado ao GAT Core e auxiliando na priorização das vulnerabilidades com dados do EPSS v3.
+
+## Contexto
+**GAT Core:** GAT Core é uma plataforma de gerenciamento de vulnerabilidades cibernéticas que centraliza e prioriza informações de segurança, facilitando a gestão e mitigação de riscos. Ele oferece uma visão holística da segurança da informação, contribuindo para a construção da melhor estratégia e apresentação de resultados.
+
+**Greenbone Community Edition (antigo Openvas):** É uma scanner de vulnerabilidades de código aberto. Ele realiza varreduras abrangentes em redes, identificando possíveis falhas de segurança. A Greenbone Community Edition é amplamente utilizada por sua capacidade de detecção precisa e sua flexibilidade em ambientes diversos.
+
+**EPSS v3 (Exploit Prediction Scoring System):** É uma métrica que avalia a probabilidade de uma vulnerabilidade ser explorada em ataques no mundo real. Utilizando dados de ameaças e técnicas avançadas de machine learning, o EPSS fornece insights valiosos que ajudam as organizações a priorizarem as vulnerabilidades que representam maiores riscos.
+
+## Benefícios da Integração
+A integração do GAT Core com o Greenbone Community Edition e a inclusão de dados do EPSS v2 traz diversos benefícios:
+
+- **Centralização de Informações:** Consolidar os resultados das varreduras de vulnerabilidades em uma única plataforma facilita a gestão e o acompanhamento das ações corretivas.
+- **Priorização Inteligente:** Utilizando o EPSS v2, o GAT Core pode reclassificar as vulnerabilidades com base na probabilidade de exploração, permitindo que as equipes de segurança foquem nas ameaças mais críticas.
+- **Automatização:** A integração permite a execução automática de varreduras e a geração de relatórios, economizando tempo e reduzindo o esforço manual.
 
 ## Pré-requisitos
 
@@ -101,3 +115,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 ## Notas
 
 - Certifique-se de substituir os valores das variáveis de ambiente no arquivo `.env` pelas suas credenciais e URLs corretas.
+
+## Conheça a GAT InfoSec
+
+https://gatinfosec.com
