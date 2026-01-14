@@ -255,7 +255,6 @@ def main():
 
                             cve_headers = ["CVE_LIST"] * 25
 
-                            # ✅ 25 pares alternados: TITLE_REFERENCE, URL_REFERENCE, ...
                             ref_headers = []
                             for _ in range(25):
                                 ref_headers += ["TITLE_REFERENCE", "URL_REFERENCE"]
@@ -266,20 +265,18 @@ def main():
                                 + original_header[:12]
                                 + cve_headers
                                 + ["EPSS", "DESCRIPTION"]
-                                + original_header[13:18]  # C14..C18
+                                + original_header[13:18]
 
-                                + ["TITLE_RECOMENDATION"] + [original_header[18]]  # C19
-                                + ["TITLE_MITIGATION"]   + [original_header[19]]   # C20
+                                + ["TITLE_RECOMENDATION"] + [original_header[18]]
+                                + ["TITLE_MITIGATION"]   + [original_header[19]]
 
-                                # seus 3 TEST (C21/C22/C23)
                                 + ["TITLE_TEST"] + [original_header[20]]
                                 + ["TITLE_TEST"] + [original_header[20]]
                                 + ["TITLE_TEST"] + [original_header[20]]
 
-                                # ✅ antes da C24 (index 23)
                                 + ref_headers
 
-                                + original_header[23:]  # C24 em diante (mantém a C24 original e o resto)
+                                + original_header[23:]
                             )
 
                             csv_writer.writerow(header)
@@ -288,7 +285,6 @@ def main():
                         for row in csv_reader[1:]:
                             if any(field.strip() for field in row):
 
-                                # ✅ agora precisa ter pelo menos 24 colunas (índice 23)
                                 if len(row) < 24:
                                     row = row + [""] * (24 - len(row))
 
@@ -307,7 +303,6 @@ def main():
                                 if not row[3]:
                                     row[3] = 'tcp'
 
-                                # garante mínimo pro seu acesso até row[22] também
                                 if len(row) < 24:
                                     row = row + [""] * (24 - len(row))
 
@@ -329,7 +324,6 @@ def main():
                                 if ('EPSS' in os.environ) and cve_0 and (cve_0 in epss_data):
                                     epss_score = epss_data[cve_0]
 
-                                # ✅ C24 split (index 23)
                                 refs_raw = row[24] if len(row) > 24 else ""
                                 refs_list = [r.strip() for r in refs_raw.split(",") if r.strip()]
 
@@ -338,7 +332,6 @@ def main():
                                     v = refs_list[i] if i < len(refs_list) else ""
                                     ref_pairs += [v, v]
 
-                                # ✅ monta linha final inserindo 50 colunas antes da C24 original
                                 row = (
                                     row[:12]
                                     + cve_cols
@@ -350,9 +343,9 @@ def main():
                                     + [title_test_c21,     row[21]]
                                     + [title_test_c22,     row[22]]
 
-                                    + ref_pairs             # ✅ alternado
+                                    + ref_pairs
 
-                                    + row[23:]              # mantém C24 original e resto
+                                    + row[23:]
                                 )
 
                                 csv_writer.writerow(["OpenVAS"] + row)
