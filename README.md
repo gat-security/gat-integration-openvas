@@ -47,7 +47,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 
 - OPENVAS_USERNAME: Usuário do Greenbone Community. Default: admin
 - OPENVAS_PASSWORD: Senha a ser configurada no Greenbone Community 
-- GAT_URL: Url do ambiente do GAT Core
+- GAT_URL: Url do ambiente do GAT Core. Caso queira executar local usar: http://host.docker.internal:8080.
 - GAT_TOKEN: Token para integração com o GAT Core sem o Bearer (https://www.gatinfosec.com/central-de-suporte/api-gat-core/)
 - ONPREMISE: True ou False para GAT Core na versão On premise
 - SCHEDULE_TYPE: Frequência de execução do scan (Once, Hourly, Daily, Weekly, Monthly, Yearly)
@@ -75,11 +75,11 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 
 4. Construa e inicie os contêineres:
    ```sh
-   docker compose -f docker-compose.yml -p greenbone-community-edition up -d --build
+   docker compose --env-file .env.example -f docker-compose.yml -p greenbone-community-edition up -d --build
 
    docker compose -f docker-compose.yml -p greenbone-community-edition exec -u gvmd gvmd gvmd --user=admin --new-password='password'
 
-   docker compose -f docker-compose.yml -p greenbone-community-edition exec gvmd python3 app/configure.py
+   docker compose -f docker-compose.yml -p greenbone-community-edition exec -u gvmd gvmd python3 app/configure.py
    ```
    > Substituir o "password" pela senha a mesma senha do .env
 

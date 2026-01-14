@@ -9,7 +9,8 @@ from datetime import datetime
 from gvm.connections import UnixSocketConnection
 from gvm.errors import GvmError
 from gvm.protocols.gmp import Gmp
-from gvm.transforms import EtreeCheckCommandTransform
+from gvm.transforms import EtreeTransform
+
 
 def generate_ical(schedule_type, schedule_date, schedule_time, timezone):
     cal = Calendar()
@@ -103,11 +104,12 @@ def execute_task(gmp, task_id):
 def main():
     path = '/run/gvmd/gvmd.sock'
     connection = UnixSocketConnection(path=path)
-    transform = EtreeCheckCommandTransform()
+    transform = EtreeTransform()
+
     schedule_type = os.getenv('SCHEDULE_TYPE', 'Daily')
     schedule_time = os.getenv('SCHEDULE_TIME', '12:00')
     schedule_date = os.getenv('SCHEDULE_FIRST_DATE', '2024-04-10')
-    execute_now = os.getenv('EXECUTE_NOW')
+    execute_now = (os.getenv('EXECUTE_NOW') or 'false')
 
     try:
         with Gmp(connection=connection, transform=transform) as gmp:

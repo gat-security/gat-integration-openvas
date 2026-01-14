@@ -8,8 +8,17 @@ import requests as requests
 import traceback
 import py7zr
 import time
+from urllib.parse import urlparse
 
 from datetime import datetime
+from urllib.parse import urlparse
+
+def split_base_url(raw: str):
+    raw = (raw or "").strip().rstrip("/")
+    p = urlparse(raw)
+    if not p.scheme:
+        p = urlparse("http://" + raw)
+    return p.scheme, p.netloc  # ("http", "host:8080")
 
 warnings.filterwarnings("ignore")
 
@@ -126,134 +135,120 @@ def check_if_scan_is_finished(connection, bearer, scan_id, is_onpremise):
             'cache-control': "no-cache"
         }
 
-    url = connection.gat_url
-    protocol = "https"
-    if "localhost" in url:
-        protocol = "http"
-        resource = '/vulnerability/scan/findById?id={}'.format(scan_id)
-    else:
-        protocol = "https"
-        resource = '/app/vulnerability/scan/findById?id={}'.format(scan_id)
+#     url = connection.gat_url
+#     protocol = "https"
+#     if "localhost" in url:
+#         protocol = "http"
+#         resource = '/vulnerability/scan/findById?id={}'.format(scan_id)
+#     else:
+#         protocol = "https"
+#         resource = '/app/vulnerability/scan/findById?id={}'.format(scan_id)
 
-    endpoint_api = "{}://{}{}".format(protocol, url, resource)
+    scheme, host = split_base_url(connection.gat_url)
+    is_local = ("localhost" in host) or ("127.0.0.1" in host)
 
-    if is_onpremise.lower() == 'true':
+    resource = f"/vulnerability/scan/findById?id={scan_id}" if is_local else f"/app/vulnerability/scan/findById?id={scan_id}"
+    endpoint_api = f"{scheme}://{host}{resource}"
+
+    if str(is_onpremise).lower() == 'true':
         proxies = {"http": "", "https": ""}
         r = s.request('GET', endpoint_api, verify=not is_onpremise, proxies=proxies)
     else:
         r = s.request('GET', endpoint_api, verify=not is_onpremise)
     response = json.loads(r.text)
+    print(response)
     print("Resultado check Scan ID {} | Status: {}".format(response['id'], response['status']))
 
     return response
 
 
 def upload_all_scan_files(connection, version, filename, script_path, filepath, on_premise, company_id):
+    on_premise = str(on_premise).lower() == "true"
 
     hora_log = str(datetime.now()).replace(":", "-").replace(" ", "T")
     log_file = open(script_path + "log_{}{}.txt".format(filename, hora_log), "a", newline='')
 
-    url = connection.gat_url
+    base_path = (os.getenv("GAT_BASE_PATH") or "").strip()
+    if base_path and not base_path.startswith("/"):
+        base_path = "/" + base_path
+    base_path = base_path.rstrip("/")
+
+    url = (connection.gat_url or "").strip().rstrip("/")
     bearer = connection.gat_token
     resource = '/app/vulnerability/upload/api/Rapid7/'
     resources = connection.custom_parser_name
-    
-    protocol = "https"
-    if "localhost" in url:
-        protocol = "http"
-        if version == "2.0":
-            resource = '/vulnerability/upload/api/{}/?decompress=true'.format(resources)
-        else:
-            resource = '/vulnerability/upload/api/{}/?decompress=true'.format(resources)
+
+    parsed = urlparse(url)
+
+    if not parsed.scheme:
+       base = "http://" + url
+       parsed = urlparse(base)
     else:
-        protocol = "https"
-        if version == "2.0":
-            resource = '/app/vulnerability/upload/api/{}/?decompress=true'.format(resources)
-        else:
-            resource = '/app/vulnerability/upload/api/{}/?decompress=true'.format(resources)
+       base = url  # já tem http:// ou https://
+
+    host = parsed.netloc  # ex: "localhost:8080"
+    scheme = parsed.scheme  # "http" ou "https"
+
+    resources = connection.custom_parser_name
+
+    resource = f"{base_path}/vulnerability/upload/api/{resources}/?decompress=true"
 
 
-    # Export Custom Parser
-    gat_point = "{}://{}{}".format(protocol, url, resource)
+    gat_point = f"{scheme}://{host}{resource}"
 
+    print("GAT endpoint:", gat_point)
     try:
-        scan_upload_max_number_of_retries = 3
-        scan_upload_current_try = 0
-        scan_is_finished = False
         upload_response_text = ""
 
-        while scan_is_finished is False:
-            try:
-                print("Tentativa {} de {} para o upload do scan".format(scan_upload_current_try, scan_upload_max_number_of_retries))
+        try:
+            file_and_path_compressed = filepath.replace(".csv", ".7z")
+            if compress_csv(filepath, file_and_path_compressed):
+                print("\nIniciando exportação do arquivo '{}'".format(file_and_path_compressed))
+                with open(file_and_path_compressed, "rb") as export_file:
+                    export_file_name = os.path.basename(file_and_path_compressed)
+                    file_dict = {'file': (export_file_name, export_file,
+                                            "application/x-7z-compressed", {'Expires': "0"})}
+                    with requests.Session() as s:
+                        s.headers = {
+                            'Authorization': 'Bearer %s' % bearer,
+                            'cache-control': "no-cache"
+                        }
 
-                file_and_path_compressed = filepath.replace(".csv", ".7z")
-                if compress_csv(filepath, file_and_path_compressed):
-                    print("\nIniciando exportação do arquivo '{}'".format(file_and_path_compressed))
-                    with open(file_and_path_compressed, "rb") as export_file:
-                        export_file_name = os.path.basename(file_and_path_compressed)
-                        file_dict = {'file': (export_file_name, export_file,
-                                                "application/x-7z-compressed", {'Expires': "0"})}
-                        with requests.Session() as s:
-                            s.headers = {
-                                'Authorization': 'Bearer %s' % bearer,
-                                'cache-control': "no-cache"
-                            }
+                    if on_premise:
+                        proxies = {"http": "", "https": ""}
+                        r = s.request('POST', gat_point, files=file_dict, verify=not on_premise, proxies=proxies)
+                    else:
+                        r = s.request('POST', gat_point, files=file_dict, verify=not on_premise)
 
-                        if on_premise:
-                            proxies = {"http": "", "https": ""}
-                            r = s.request('POST', gat_point, files=file_dict, verify=not on_premise, proxies=proxies)
-                        else:
-                            r = s.request('POST', gat_point, files=file_dict, verify=not on_premise)
+                    upload_response_text = r.text
+                    try:
+                        response = r.json()
+                    except Exception:
+                        raise Exception(f"Resposta do upload não é JSON (HTTP {r.status_code}): {r.text}")
 
-                        upload_response_text = r.text
-                        response = json.loads(r.text)
-                        print("Scan ID gerado: {}".format(response['scan_id']))
-                        #print("{} - {}".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
-                        log_file.write("\t\t{} - {}\n".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
+                    print("Response gerado: {}".format(response))
+                    log_file.write("\t\t{} - {}\n".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
 
-                        time_to_wait = 15 #Em segundos
-                        count_max_sleep = 10 #Quantidade de vezes máximas que o código pode dormir
-                        count_current_sleep = 0
-                        while scan_is_finished is False:
-                            scan_check = check_if_scan_is_finished(connection, bearer, response['scan_id'], on_premise)
-                            if scan_check['status'] == "COMPLETED" or scan_check['status'] == "ERROR":
-                                scan_is_finished = True
-                            else:
-                                print("Vamos aguardar {} segundos para verificar o status do scan".format(time_to_wait))
-                                time.sleep(time_to_wait)
-                            count_current_sleep += 1
+                    if os.path.exists(script_path + 'xmls/' + filename + '.xml'):
+                        write_xml_hash(filename, script_path, company_id)
+                        os.remove(script_path + 'xmls/' + filename + '.xml')
 
-                            if count_current_sleep > count_max_sleep:
-                                print("Aguardamos {} vezes o scan completar, sem sucesso, vamos continuar para a próxima exportação".format(count_current_sleep))
-                                break
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
 
-                        if os.path.exists(script_path + 'xmls/' + filename + '.xml'):
-                            write_xml_hash(filename, script_path, company_id)
-                            os.remove(script_path + 'xmls/' + filename + '.xml')
-
-                        if os.path.exists(filepath):
-                            os.remove(filepath)
-
-                        if os.path.exists(file_and_path_compressed):
-                            os.remove(file_and_path_compressed)
-                else:
-                    raise Exception("Erro na compressão do arquivo CSV")
-            except Exception as e:
-                print("{} - Upload Error: {}".format(datetime.now().strftime(
-                    "%Y-%m-%d-%I:%M:%S"
-                ), e))
-                print("Retorno do upload: {}".format(upload_response_text))
-                log_file.write("\t\t{} - Upload Error: {}\n".format(datetime.now().strftime(
-                    "%Y-%m-%d-%I:%M:%S"
-                ), e))
-                print(traceback.format_exc())
-
-            scan_upload_current_try += 1
-            if scan_upload_current_try > scan_upload_max_number_of_retries:
-                scan_is_finished = True
-
-        print("Upload e verificação do Scan confirmado, vamos aguardar 120 segundos antes de iniciarmos o próximo")
-        time.sleep(120)
+                    if os.path.exists(file_and_path_compressed):
+                        os.remove(file_and_path_compressed)
+            else:
+                raise Exception("Erro na compressão do arquivo CSV")
+        except Exception as e:
+            print("{} - Upload Error: {}".format(datetime.now().strftime(
+                "%Y-%m-%d-%I:%M:%S"
+            ), e))
+            print("Retorno do upload: {}".format(upload_response_text))
+            log_file.write("\t\t{} - Upload Error: {}\n".format(datetime.now().strftime(
+                "%Y-%m-%d-%I:%M:%S"
+            ), e))
+            print(traceback.format_exc())
 
     except Exception as e:
         print("{} - Upload Error: {}".format(datetime.now().strftime(

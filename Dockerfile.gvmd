@@ -1,11 +1,23 @@
-FROM greenbone/gvmd:stable
+FROM registry.community.greenbone.net/community/gvmd:stable
 
-# Instalar dependências
+USER root
+
+# Ferramentas necessárias para criar venv e instalar libs
 RUN apt-get update && \
-    apt-get install -y python3.10 python3-pip cron
+    apt-get install -y --no-install-recommends python3-venv python3-pip && \
+    rm -rf /var/lib/apt/lists/*
 
-# Instalar dependências
-RUN pip3 install requests python-gvm py7zr pytz icalendar
+# Cria venv e instala dependências dentro dele
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir -U pip setuptools wheel && \
+    /opt/venv/bin/pip install --no-cache-dir requests python-gvm py7zr pytz icalendar
+
+# (opcional) deixa o venv no PATH por padrão
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Se você monta ./src em /app, ok. Senão, copie o script:
+# COPY ./src/configure.py /app/configure.py
+
 
 # Criar um script para configurar o cron job
 RUN echo "0 * * * * gvmd python3 /app/main.py" >> /etc/crontab

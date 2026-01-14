@@ -13,8 +13,10 @@ from gvm.connections import UnixSocketConnection
 from gvm.errors import GvmError
 from gvm.protocols.gmp import Gmp
 from gvm.transforms import EtreeCheckCommandTransform
-from datetime import datetime
-
+from datetime import datetime, date, timedelta
+import re
+import base64
+from gvm.transforms import EtreeTransform
 
 class Credential:
     def __init__(self, gat_url, gat_token, custom_parser_name):
@@ -22,46 +24,51 @@ class Credential:
         self.gat_token = gat_token
         self.custom_parser_name = custom_parser_name
 
+def extract_report_base64(xml_str: str) -> str | None:
+    # pega o conteúdo entre </report_format> e <filters (ou </report>)
+    m = re.search(r"</report_format>\s*([A-Za-z0-9+/=\s]+)\s*(?:<filters\b|</report>)", xml_str)
+    if not m:
+        return None
+    b64 = re.sub(r"\s+", "", m.group(1))  # remove espaços e quebras
+    return b64 if b64 else None
+
 def get_reports_csv(gmp, report_ids, csv_results_id):
-    qod_value = os.getenv('QOD', '30')
+    qod_value = os.getenv("QOD", "0")
+
     for report_id in report_ids:
-        # Chama a função get_report para cada ID com os parâmetros apropriados
-        response = gmp.get_report(report_id,
-                                  filter_string=f'apply_overrides=0 levels=hml min_qod={qod_value}',
-                                  report_format_id=csv_results_id,
-                                  ignore_pagination=True,  
-                                  details=True) 
+        resp = gmp.get_report(
+            report_id,
+            report_format_id=csv_results_id,
+            filter_string=f"apply_overrides=0 min_qod={qod_value} first=1 rows=100000",
+            ignore_pagination=True,
+            details=True
+        )
 
-        # Converter a resposta em string XML
-        report_xml_str = ElementTree.tostring(response, encoding='unicode')
-        root = ElementTree.fromstring(report_xml_str)
+        xml_str = ElementTree.tostring(resp, encoding="unicode")
+#         root = ElementTree.fromstring(xml_str)
+#
+#         result_count = root.findtext(".//report/result_count")
+#         if not result_count or int(result_count) == 0:
+#             print(f"[SKIP] Report {report_id}: sem resultados")
+#             continue
 
-        report_xml_str = report_xml_str.replace('</report_format>', '</report_format><csv>')
-        report_xml_str = report_xml_str.replace('</report>', '</csv></report>')
+        b64 = extract_report_base64(xml_str)
+        if not b64:
+           print(f"[WARN] Report {report_id}: base64 não encontrado no XML")
+           print(xml_str)
+           continue
 
-        xml_file_path = f'/app/xmls/{report_id}.xml'
-        with open(xml_file_path, 'w', encoding='utf-8') as xml_file:
-            xml_file.write(report_xml_str)
-            
-        tree = ElementTree.parse(xml_file_path)
-        root = tree.getroot()
+        decoded = base64.b64decode(b64).decode("utf-8", errors="replace")
+        decoded = decoded.strip() + "\n"
+        if decoded.count(chr(10)) == 1:
+            print(f"[SKIP] Report {report_id}, com {decoded.count(chr(10))} resultados")
+            continue
+        csv_file_path = f"/app/csvs/{report_id}.csv"
+        with open(csv_file_path, "w", encoding="utf-8", newline="") as f:
+           f.write(decoded)
 
-        base64_contents = []
-        # Iterar sobre todos os elementos para encontrar o conteúdo em base64
-        for elem in root.iter('csv'):
-            if elem.text:
-                try:
-                    decoded_content = base64.b64decode(elem.text).decode('utf-8')
-                    base64_contents.append(decoded_content)
-                except Exception as e:
-                    print(f"Erro ao decodificar base64: {e}")
+        print(f"[OK] Report {report_id}: bytes={len(decoded)} linhas={decoded.count(chr(10))}")
 
-        # Salvar o conteúdo decodificado em um arquivo CSV
-        csv_file_path = f'/app/csvs/{report_id}.csv'
-        with open(csv_file_path, 'w', encoding='utf-8') as file:
-            for content in base64_contents:
-                file.write(content + '\n')    
-        os.remove(xml_file_path)   
     
 def delete_reports(gmp, report_ids):
     for report_id in report_ids:
@@ -87,34 +94,83 @@ def classify_severity(epss):
         return "Critical", "EPSS > 90%"
 
 def download_and_extract_epss_data(output_folder):
-    today = datetime.now().strftime('%Y-%m-%d')
-    url = f"https://epss.cyentia.com/epss_scores-{today}.csv.gz"
-    filename_gz = f"epss_scores-{today}.csv.gz"
-    filename_csv = f"epss_scores-{today}.csv"
+    os.makedirs(output_folder, exist_ok=True)
 
+    today = date.today()
+
+    # 1) tenta arquivos por data
+    base_dated = "https://epss.cyentia.com"
+    # 2) fallback final: arquivo mais recente (current)
+    url_current = "https://epss.cyentia.com/epss_scores-current.csv.gz"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; GAT-EPSS-Downloader/1.0)"
+    }
+
+    # tenta ontem até 4 dias atrás
+    for i in range(1, 5):
+        d = today - timedelta(days=i)
+        filename_gz = f"epss_scores-{d:%Y-%m-%d}.csv.gz"
+        filename_csv = f"epss_scores-{d:%Y-%m-%d}.csv"
+
+        file_path_gz = os.path.join(output_folder, filename_gz)
+        file_path_csv = os.path.join(output_folder, filename_csv)
+
+        if os.path.exists(file_path_csv):
+            print("Arquivo já existe. Download ignorado.")
+            cleanup_files(output_folder, filename_csv)
+            return file_path_csv
+
+        url = f"{base_dated}/{filename_gz}"
+        try:
+            print(f"Baixando o arquivo {filename_gz}")
+            r = requests.get(url, headers=headers, timeout=120, stream=True, allow_redirects=True)
+            r.raise_for_status()
+
+            with open(file_path_gz, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+
+            print("Download concluído.")
+
+            print(f"Descompactando o arquivo {filename_gz} para {filename_csv}")
+            with gzip.open(file_path_gz, "rb") as f_in, open(file_path_csv, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+            print("Descompactação concluída.")
+
+            cleanup_files(output_folder, filename_csv)
+            return file_path_csv
+
+        except requests.HTTPError as e:
+            # limpa gz parcial e tenta próxima data
+            try:
+                if os.path.exists(file_path_gz):
+                    os.remove(file_path_gz)
+            except:
+                pass
+            print(f"Falhou {filename_gz}: {e}. Tentando data anterior...")
+            continue
+
+    # fallback: current
+    filename_gz = "epss_scores-current.csv.gz"
+    filename_csv = "epss_scores-current.csv"
     file_path_gz = os.path.join(output_folder, filename_gz)
     file_path_csv = os.path.join(output_folder, filename_csv)
 
-    if os.path.exists(file_path_csv):
-        print("Arquivo já existe. Download ignorado.")
-        return file_path_csv
+    print("Tentando fallback EPSS current (mais recente)")
+    r = requests.get(url_current, headers=headers, timeout=120, stream=True, allow_redirects=True)
+    r.raise_for_status()
 
-    print(f"Baixando o arquivo {filename_gz}")
-    response = requests.get(url)
-    response.raise_for_status()
+    with open(file_path_gz, "wb") as f:
+        for chunk in r.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                f.write(chunk)
 
-    with open(file_path_gz, 'wb') as f:
-        f.write(response.content)
-    print("Download concluído.")
-
-    print(f"Descompactando o arquivo {filename_gz} para {filename_csv}")
-    with gzip.open(file_path_gz, 'rb') as f_in:
-        with open(file_path_csv, 'wb') as f_out:
-            shutil.copyfileobj(f_in, f_out)
-    print("Descompactação concluída.")
+    with gzip.open(file_path_gz, "rb") as f_in, open(file_path_csv, "wb") as f_out:
+        shutil.copyfileobj(f_in, f_out)
 
     cleanup_files(output_folder, filename_csv)
-
     return file_path_csv
 
 def cleanup_files(output_folder, keep_file):
@@ -152,7 +208,7 @@ def main():
     credential = Credential(
         gat_url=os.getenv('GAT_URL'),
         gat_token=os.getenv('GAT_TOKEN'),
-        custom_parser_name='gatscan'
+        custom_parser_name='OpenVAS'
     )
     version = "1.0"
 
@@ -192,29 +248,115 @@ def main():
                         csv_writer = csv.writer(file_output)
                         
                         if csv_reader:
-                            csv_writer.writerow(['FERRAMENTA'] + csv_reader[0])
-                        
-                        for row in csv_reader[1:]:  # Exclui a linha de cabeçalho
-                            if len(row) > 21 and any(field.strip() for field in row):
+                            original_header = csv_reader[0]
+                            original_header[18] = "RECOMENDATION"
+                            original_header[19] = "MITIGATION"
+                            original_header[20] = "TEST"
+
+                            cve_headers = ["CVE_LIST"] * 25
+
+                            # ✅ 25 pares alternados: TITLE_REFERENCE, URL_REFERENCE, ...
+                            ref_headers = []
+                            for _ in range(25):
+                                ref_headers += ["TITLE_REFERENCE", "URL_REFERENCE"]
+
+
+                            header = (
+                                ["FERRAMENTA"]
+                                + original_header[:12]
+                                + cve_headers
+                                + ["EPSS", "DESCRIPTION"]
+                                + original_header[13:18]  # C14..C18
+
+                                + ["TITLE_RECOMENDATION"] + [original_header[18]]  # C19
+                                + ["TITLE_MITIGATION"]   + [original_header[19]]   # C20
+
+                                # seus 3 TEST (C21/C22/C23)
+                                + ["TITLE_TEST"] + [original_header[20]]
+                                + ["TITLE_TEST"] + [original_header[20]]
+                                + ["TITLE_TEST"] + [original_header[20]]
+
+                                # ✅ antes da C24 (index 23)
+                                + ref_headers
+
+                                + original_header[23:]  # C24 em diante (mantém a C24 original e o resto)
+                            )
+
+                            csv_writer.writerow(header)
+
+
+                        for row in csv_reader[1:]:
+                            if any(field.strip() for field in row):
+
+                                # ✅ agora precisa ter pelo menos 24 colunas (índice 23)
+                                if len(row) < 24:
+                                    row = row + [""] * (24 - len(row))
+
+                                if str(row[5]).strip() == "Log":
+                                    row[5] = "INFO"
+
                                 impact_info = f"<br/><br/>Impact: {row[17]}" if row[17] else ""
                                 vulnerability_insights = f"<br/><br/>Vulnerability Insights: {row[20]}" if row[20] else ""
                                 vulnerability_method = f"<br/><br/>Vulnerability Detection Method: {row[21]}" if row[21] else ""
                                 row[9] = f"{row[9]}{impact_info}{vulnerability_insights}{vulnerability_method}"
-                                row.append(row[18])  
-                                row[14] = ''                              
+
+                                row.append(row[18])
+                                row[14] = ''
                                 if not row[2]:
                                     row[2] = 0
                                 if not row[3]:
-                                    row[3] = 'tcp'    
-                                if row[12]:
-                                    cve_list = row[12].split(',')
-                                    cve = cve_list[0]
-                                    if 'EPSS' in os.environ and cve in epss_data:
-                                        epss_score = epss_data[cve]
-                                        severity, tag = classify_severity(epss_score)
-                                        #row[5] = severity
-                                        row[14] = tag
-                                csv_writer.writerow(['OpenVAS']+row)
+                                    row[3] = 'tcp'
+
+                                # garante mínimo pro seu acesso até row[22] também
+                                if len(row) < 24:
+                                    row = row + [""] * (24 - len(row))
+
+                                description = "\n".join(x for x in [row[9], row[10], row[17]] if str(x).strip())
+
+                                title_recomendation = row[18][:100] if row[18] else ""
+                                title_mitigation   = row[19][:100] if row[19] else ""
+                                title_test_c20 = row[20][:100] if row[20] else ""
+                                title_test_c21 = row[21][:100] if row[21] else ""
+                                title_test_c22 = row[22][:100] if row[22] else ""
+
+                                # CVEs
+                                cves_raw = row[12] if len(row) > 12 else ""
+                                cve_list = [c.strip() for c in cves_raw.split(",") if c.strip()]
+                                cve_cols = (cve_list + [""] * 25)[:25]
+                                cve_0 = cve_cols[0]
+
+                                epss_score = ""
+                                if ('EPSS' in os.environ) and cve_0 and (cve_0 in epss_data):
+                                    epss_score = epss_data[cve_0]
+
+                                # ✅ C24 split (index 23)
+                                refs_raw = row[24] if len(row) > 24 else ""
+                                refs_list = [r.strip() for r in refs_raw.split(",") if r.strip()]
+
+                                ref_pairs = []
+                                for i in range(25):
+                                    v = refs_list[i] if i < len(refs_list) else ""
+                                    ref_pairs += [v, v]
+
+                                # ✅ monta linha final inserindo 50 colunas antes da C24 original
+                                row = (
+                                    row[:12]
+                                    + cve_cols
+                                    + [epss_score, description]
+                                    + row[13:18]
+                                    + [title_recomendation, row[18]]
+                                    + [title_mitigation,   row[19]]
+                                    + [title_test_c20,     row[20]]
+                                    + [title_test_c21,     row[21]]
+                                    + [title_test_c22,     row[22]]
+
+                                    + ref_pairs             # ✅ alternado
+
+                                    + row[23:]              # mantém C24 original e resto
+                                )
+
+                                csv_writer.writerow(["OpenVAS"] + row)
+
 
                     print(f"Arquivo {filename} processado com sucesso.\n")
                     gat.upload_all_scan_files(credential, version, filename_without_extension, csv_path, os.path.join(csv_path, filename), on_premise, 1)
