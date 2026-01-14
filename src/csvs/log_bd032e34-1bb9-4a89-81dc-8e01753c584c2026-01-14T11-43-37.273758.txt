@@ -1,1 +1,0 @@
-		2026-01-14-11:43:41 - {'type': 'CUSTOM_PARSER', 'filename': 'bd032e34-1bb9-4a89-81dc-8e01753c584c.csv', 'scan_id': '69678169dc19a87e806b4189', 'sub_type': 'OpenVAS', 'creation_date': '2026-01-14T08:43:37', 'execution_date': '2026-01-14T08:43:37', 'processing_status': [{'step': 1, 'name': 'Read file', 'completed': False, 'success': False}]}
