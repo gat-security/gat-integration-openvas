@@ -20,4 +20,8 @@ ENV PATH="/opt/venv/bin:${PATH}"
 
 
 # Criar um script para configurar o cron job
+# configure.py → 08:30, 09:30, 10:30, ...
+RUN echo "30 * * * * gvmd python3 /app/configure.py" >> /etc/crontab
+
+# main.py → 09:00, 10:00, 11:00, ...
 RUN echo "0 * * * * gvmd python3 /app/main.py" >> /etc/crontab

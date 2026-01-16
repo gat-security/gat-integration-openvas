@@ -57,6 +57,8 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 - QOD: Descreve a confiabilidade da detecção de vulnerabilidade executada ou detecção de produto. (https://docs.greenbone.net/GSM-Manual/gos-20.08/en/reports.html#quality-of-detection-concept)
 - EXECUTE_NOW: se executará o scanner logo após concluir a configuração
 - EPSS: define se utilizará o EPSS para reclassificar a vulnerabilidade
+- GREENBONE_HOSTS_FILE: Define o arquivo hosts usado para definir os targets no scan.
+- ASSETS_PAGE_SIZE: Define a quantidade de asserts baixados por vez.
 
    ```
    OPENVAS_USERNAME=admin

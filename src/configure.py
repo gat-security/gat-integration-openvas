@@ -10,7 +10,7 @@ from gvm.connections import UnixSocketConnection
 from gvm.errors import GvmError
 from gvm.protocols.gmp import Gmp
 from gvm.transforms import EtreeTransform
-
+from sync_hosts_from_assets import sync_hosts_from_assets
 
 def generate_ical(schedule_type, schedule_date, schedule_time, timezone):
     cal = Calendar()
@@ -69,33 +69,60 @@ def get_schedule_id(gmp, schedule_type, schedule_date, schedule_time):
     print(f"Agendamento '{name}' criado com sucesso. ID: {schedule_response.get('id')}")
     return schedule_response.get('id')
 
+def normalize_host_name(host: str) -> str:
+    return host.replace("/", "_").replace(":", "_")
+
+def build_task_name(host):
+    return f"GAT-Scan-{host}"
+
 def create_target(gmp, host):
-    target_name = host
-    
+    target_name = f"GAT-{normalize_host_name(host)}"
+
     targets_response = gmp.get_targets()
     for target in targets_response.findall('target'):
-        if target.find('name').text == target_name:
-            print(f"Target '{target_name}' já existe. ID: {target.get('id')}")
+        name_el = target.find('name')
+        hosts_el = target.find('hosts')
+
+        if name_el is not None and name_el.text == target_name:
+            print(f"Target já existe: {target_name}")
             return target.get('id')
-        
+
+        # segurança extra: mesmo host
+        if hosts_el is not None and host in hosts_el.text.split(','):
+            print(f"Target com host {host} já existe")
+            return target.get('id')
+
     target_response = gmp.create_target(
         name=target_name,
         hosts=[host],
-        port_range='1-65000' 
+        port_range='1-65000'
     )
-    print(f"Target '{target_name}' criado com sucesso. ID: {target_response.get('id')}")
+
+    print(f"Target criado: {target_name}")
     return target_response.get('id')
 
-def create_task(gmp, target_id, config_id, scanner_id, schedule_id):
-    task_name = f"Scanner: {target_id}"
+def create_task(gmp, host, target_id, config_id, scanner_id, schedule_id):
+    task_name = build_task_name(host)
+
+    tasks_response = gmp.get_tasks()
+    for task in tasks_response.findall('task'):
+        name_el = task.find('name')
+        if name_el is not None and name_el.text == task_name:
+            print(f"Task já existe: {task_name}")
+            return task.get('id')
+
     task_response = gmp.create_task(
         name=task_name,
         config_id=config_id,
         target_id=target_id,
         scanner_id=scanner_id,
-        schedule_id=schedule_id
+        schedule_id=schedule_id,
+        alterable=True
     )
+
+    print(f"Task criada: {task_name}")
     return task_response.get('id')
+
 
 def execute_task(gmp, task_id):
     start_task = gmp.start_task(task_id)
@@ -110,6 +137,16 @@ def main():
     schedule_time = os.getenv('SCHEDULE_TIME', '12:00')
     schedule_date = os.getenv('SCHEDULE_FIRST_DATE', '2024-04-10')
     execute_now = (os.getenv('EXECUTE_NOW') or 'false')
+
+    try:
+        sync_hosts_from_assets(
+            connection=credential,
+            hosts_file_path=os.getenv("GREENBONE_HOSTS_FILE", "/app/hosts"),
+            page_size=int(os.getenv("ASSETS_PAGE_SIZE", "30")),
+            on_premise=on_premise
+        )
+    except Exception as e:
+        print(f"[WARN] Falha ao sincronizar hosts do GAT: {e}")
 
     try:
         with Gmp(connection=connection, transform=transform) as gmp:
@@ -130,7 +167,7 @@ def main():
                     if host:
                         target_id = create_target(gmp, host)
                         if target_id:
-                            task_id = create_task(gmp, target_id, config_id, scanner_id, schedule_id)
+                            task_id = create_task(gmp, host, target_id, config_id, scanner_id, schedule_id)
                             if execute_now.lower() == 'true':
                                 execute_task(gmp, task_id)                            
                             print(f'Task ID: {task_id}')
