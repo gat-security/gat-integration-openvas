@@ -139,12 +139,7 @@ def main():
     execute_now = (os.getenv('EXECUTE_NOW') or 'false')
 
     try:
-        sync_hosts_from_assets(
-            connection=credential,
-            hosts_file_path=os.getenv("GREENBONE_HOSTS_FILE", "/app/hosts"),
-            page_size=int(os.getenv("ASSETS_PAGE_SIZE", "30")),
-            on_premise=on_premise
-        )
+        sync_hosts_from_assets()
     except Exception as e:
         print(f"[WARN] Falha ao sincronizar hosts do GAT: {e}")
 

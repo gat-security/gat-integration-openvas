@@ -1,56 +1,87 @@
 import os
-import json
 import traceback
 import requests as requests
 from urllib.parse import urlparse
 
 
-def sync_hosts_from_assets(connection, hosts_file_path="/app/hosts", page_size=30, on_premise=False):
+def _parse_csv_ids(env_value: str):
     """
-    Busca /api/v2/assets paginado, filtra type=HOST, coleta IPs e grava um IP por linha em hosts_file_path.
+    Converte "id1,id2, id3" -> ["id1","id2","id3"] (ignorando vazios).
     """
-    on_premise = str(on_premise).lower() == "true"
-    bearer = connection.gat_token
-    url = (connection.gat_url or "").strip().rstrip("/")
+    if not env_value:
+        return []
+    return [x.strip() for x in env_value.split(",") if x.strip()]
+def _unwrap(value):
+    if isinstance(value, tuple) and len(value) == 1:
+        return value[0]
+    return value
 
-    # Mesmo padrão do upload_all_scan_files (assume http se vier sem scheme)
+def sync_hosts_from_assets():
+    """
+    POST /api/v2/assets paginado, filtrando type=HOST e tags (FILTER_TAG_ID),
+    coleta IPs e grava um IP/32 por linha em hosts_file_path.
+    """
+    hosts_file_path= _unwrap(os.getenv("GREENBONE_HOSTS_FILE", "/app/hosts"))
+    page_size=int(os.getenv("ASSETS_PAGE_SIZE", "200")),
+    on_premise = os.getenv('ONPREMISE')
+
+    on_premise = str(on_premise).lower() == "true"
+    bearer = os.getenv('GAT_TOKEN')
+    url = (os.getenv('GAT_URL') or "").strip().rstrip("/")
+
     parsed = urlparse(url)
     if not parsed.scheme:
-        base = "http://" + url
-        parsed = urlparse(base)
-    else:
-        base = url
+        parsed = urlparse("http://" + url)
 
-    host = parsed.netloc          # ex: "localhost:8080"
-    scheme = parsed.scheme        # "http" ou "https"
+    host = parsed.netloc
+    scheme = parsed.scheme
 
-    # endpoint base (sem /app) igual ao curl que você mandou
     assets_base = f"{scheme}://{host}/api/v2/assets"
 
-    print("Assets endpoint base:", assets_base)
+
+    tag_ids = _parse_csv_ids(os.getenv("FILTER_TAG_ID", ""))
+    print(os.getenv("FILTER_TAG_ID", ""), tag_ids)
+    filter_body = {"type": ["HOST"]}
+    if tag_ids:
+        filter_body["tags"] = tag_ids
+
+    print(f"Assets endpoint base: {assets_base} filters: {filter_body}")
 
     ips = set()
-    upload_response_text = ""
+    last_response_text = ""
 
     try:
         page = 0
         while True:
             endpoint = f"{assets_base}?size={page_size}&page={page}"
-            print(f"Buscando assets: page={page} size={page_size}")
+            print(f"Buscando assets: page={page} size={page_size} tags={len(tag_ids)}")
 
             with requests.Session() as s:
                 s.headers = {
-                    'Authorization': 'Bearer %s' % bearer,
-                    'cache-control': "no-cache",
-                    'Accept': "application/json",
-                    'Content-Type': "application/json"
+                    "Authorization": f"Bearer {bearer}",
+                    "cache-control": "no-cache",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
                 }
 
                 if on_premise:
                     proxies = {"http": "", "https": ""}
-                    r = s.request('GET', endpoint, verify=not on_premise, proxies=proxies)
+                    r = s.request(
+                        "POST",
+                        endpoint,
+                        json=filter_body,
+                        verify=not on_premise,
+                        proxies=proxies,
+                        timeout=120,
+                    )
                 else:
-                    r = s.request('GET', endpoint, verify=not on_premise)
+                    r = s.request(
+                        "POST",
+                        endpoint,
+                        json=filter_body,
+                        verify=not on_premise,
+                        timeout=120,
+                    )
 
             if r.status_code == 204:
                 print("Assets retornou 204 (No Content). Encerrando paginação.")
@@ -59,7 +90,7 @@ def sync_hosts_from_assets(connection, hosts_file_path="/app/hosts", page_size=3
             if r.status_code >= 400:
                 raise Exception(f"Erro HTTP {r.status_code} ao consultar assets: {r.text}")
 
-            upload_response_text = r.text
+            last_response_text = r.text
 
             try:
                 data = r.json()
@@ -71,7 +102,6 @@ def sync_hosts_from_assets(connection, hosts_file_path="/app/hosts", page_size=3
                 print("Página vazia, encerrando paginação.")
                 break
 
-            # coleta IPs de HOST
             for item in content:
                 if not isinstance(item, dict):
                     continue
@@ -91,29 +121,35 @@ def sync_hosts_from_assets(connection, hosts_file_path="/app/hosts", page_size=3
                     if ip:
                         ips.add(ip)
 
+            if data.get("last") is True:
+                print("Página marcada como last=true. Encerrando paginação.")
+                break
+
             page += 1
-        print("Iniciando gravação dos hosts no arquivo. {}".format(ips))
+
+        print(f"Iniciando gravação dos hosts no arquivo ({len(ips)} IPs novos).")
+
         existing = set()
         if os.path.exists(hosts_file_path):
             with open(hosts_file_path, "r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
                     line = line.strip()
                     if line:
-                        existing.add(line)
+                        existing.add(line.replace("/32", ""))
 
         merged = existing | ips
 
         os.makedirs(os.path.dirname(hosts_file_path) or ".", exist_ok=True)
-        tmp_path = hosts_file_path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        with open(hosts_file_path, "w", encoding="utf-8") as f:
             for ip in sorted(merged):
-                f.write(ip + "/32" + "\n")
-        os.replace(tmp_path, hosts_file_path)
+                f.write(ip + "/32\n")
 
-        print(f"Arquivo hosts gerado com sucesso: {hosts_file_path} ({len(ips)} IPs)")
+        print(f"Arquivo hosts atualizado: {hosts_file_path} (total {len(merged)} entradas)")
 
     except Exception as e:
-        print("{} - Sync Hosts Error: {}".format(__import__("datetime").datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), e))
-        print("Retorno da chamada assets: {}".format(upload_response_text))
+        print("{} - Sync Hosts Error: {}".format(
+            __import__("datetime").datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), e
+        ))
+        print("Última resposta do assets:", last_response_text)
         print(traceback.format_exc())
         raise

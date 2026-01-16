@@ -99,6 +99,9 @@ services:
       TIMEZONE: "${TIMEZONE}"
       QOD: "${QOD}"
       EPSS: "${EPSS}"
+      GREENBONE_HOSTS_FILE: "${GREENBONE_HOSTS_FILE}"
+      ASSETS_PAGE_SIZE: "${ASSETS_PAGE_SIZE}"
+      FILTER_TAG_ID: "${FILTER_TAG_ID}"
     depends_on:
       pg-gvm:
         condition: service_started
