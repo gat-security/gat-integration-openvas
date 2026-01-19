@@ -59,6 +59,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 - EPSS: define se utilizará o EPSS para reclassificar a vulnerabilidade
 - GREENBONE_HOSTS_FILE: Define o arquivo hosts usado para definir os targets no scan.
 - ASSETS_PAGE_SIZE: Define a quantidade de asserts baixados por vez.
+- FILTER_TAG_ID: Define o filtro de id(s) de tag que devem ser usados como filtro dos asserts. Pode ser passado um lista separado por vírgula ','.
 
    ```
    OPENVAS_USERNAME=admin
@@ -73,6 +74,9 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
    QOD=30
    EXECUTE_NOW=True
    EPSS=True
+   GREENBONE_HOSTS_FILE=./src/hosts
+   ASSETS_PAGE_SIZE=200
+   FILTER_TAG_ID=
    ```
 
 4. Construa e inicie os contêineres:
