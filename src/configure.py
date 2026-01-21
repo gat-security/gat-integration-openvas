@@ -97,7 +97,7 @@ def create_target(gmp, host):
         hosts=[host],
         port_range='1-65000'
     )
-
+    print("create_target response:", target_response.tag, target_response.attrib)
     print(f"Target criado: {target_name}")
     return target_response.get('id')
 
