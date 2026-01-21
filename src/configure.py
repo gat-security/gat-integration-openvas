@@ -156,7 +156,7 @@ def main():
                 print('Error: Scanner ID ou Config ID não encontrado')
                 return
 
-            with open('/app/hosts', 'r') as file:
+            with open(os.getenv("GREENBONE_HOSTS_FILE", ""), 'r') as file:
                 for line in file:
                     host = line.strip()
                     if host:

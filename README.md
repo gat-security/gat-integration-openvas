@@ -81,7 +81,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 
 4. Construa e inicie os contêineres:
    ```sh
-   docker compose --env-file .env.example -f docker-compose.yml -p greenbone-community-edition up -d --build
+   docker compose --env-file .env -f docker-compose.yml -p greenbone-community-edition up -d --build
 
    docker compose -f docker-compose.yml -p greenbone-community-edition exec -u gvmd gvmd gvmd --user=admin --new-password='password'
 
