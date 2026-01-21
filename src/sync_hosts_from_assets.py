@@ -142,7 +142,7 @@ def sync_hosts_from_assets():
         os.makedirs(os.path.dirname(hosts_file_path) or ".", exist_ok=True)
         with open(hosts_file_path, "w", encoding="utf-8") as f:
             for ip in sorted(merged):
-                f.write(ip + "/32\n")
+                f.write(ip + "\n")
 
         print(f"Arquivo hosts atualizado: {hosts_file_path} (total {len(merged)} entradas)")
 
