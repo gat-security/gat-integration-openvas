@@ -60,6 +60,7 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 - GREENBONE_HOSTS_FILE: Define o arquivo hosts usado para definir os targets no scan.
 - ASSETS_PAGE_SIZE: Define a quantidade de asserts baixados por vez.
 - FILTER_TAG_ID: Define o filtro de id(s) de tag que devem ser usados como filtro dos asserts. Pode ser passado um lista separado por vírgula ','.
+  Caso vazio, não filtra por TAG na inserção dos targets no Greenbone através dos Ativos do GAT Core.
 - GAT_BASE_PATH: A base da url do GAT.
 
    ```
