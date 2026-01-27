@@ -1,19 +1,19 @@
 # Integração GAT Scan com priorização- GAT Core x Greenbone Community (antigo Openvas) 
 
-Este projeto configura e executa o Greenbone Community Edition usando Docker. Ele inclui todos os serviços necessários para executar o Greenbone Community Edition, bem como integrar o resultado ao GAT Core e auxiliando na priorização das vulnerabilidades com dados do EPSS v3.
+Este projeto configura e executa o Greenbone Community Edition usando Docker. Ele inclui todos os serviços necessários para executar o Greenbone Community Edition, bem como integrar o resultado ao GAT Core e auxiliando na priorização das vulnerabilidades com dados do EPSS.
 
 ## Contexto
 **GAT Core:** GAT Core é uma plataforma de gerenciamento de vulnerabilidades cibernéticas que centraliza e prioriza informações de segurança, facilitando a gestão e mitigação de riscos. Ele oferece uma visão holística da segurança da informação, contribuindo para a construção da melhor estratégia e apresentação de resultados.
 
 **Greenbone Community Edition (antigo Openvas):** É uma scanner de vulnerabilidades de código aberto. Ele realiza varreduras abrangentes em redes, identificando possíveis falhas de segurança. A Greenbone Community Edition é amplamente utilizada por sua capacidade de detecção precisa e sua flexibilidade em ambientes diversos.
 
-**EPSS v3 (Exploit Prediction Scoring System):** É uma métrica que avalia a probabilidade de uma vulnerabilidade ser explorada em ataques no mundo real. Utilizando dados de ameaças e técnicas avançadas de machine learning, o EPSS fornece insights valiosos que ajudam as organizações a priorizarem as vulnerabilidades que representam maiores riscos.
+**EPSS (Exploit Prediction Scoring System):** É uma métrica que avalia a probabilidade de uma vulnerabilidade ser explorada em ataques no mundo real. Utilizando dados de ameaças e técnicas avançadas de machine learning, o EPSS fornece insights valiosos que ajudam as organizações a priorizarem as vulnerabilidades que representam maiores riscos.
 
 ## Benefícios da Integração
-A integração do GAT Core com o Greenbone Community Edition e a inclusão de dados do EPSS v2 traz diversos benefícios:
+A integração do GAT Core com o Greenbone Community Edition e a inclusão de dados do EPSS traz diversos benefícios:
 
 - **Centralização de Informações:** Consolidar os resultados das varreduras de vulnerabilidades em uma única plataforma facilita a gestão e o acompanhamento das ações corretivas.
-- **Priorização Inteligente:** Utilizando o EPSS v2, o GAT Core pode reclassificar as vulnerabilidades com base na probabilidade de exploração, permitindo que as equipes de segurança foquem nas ameaças mais críticas.
+- **Priorização Inteligente:** Utilizando o EPSS, o GAT Core pode reclassificar as vulnerabilidades com base na probabilidade de exploração, permitindo que as equipes de segurança foquem nas ameaças mais críticas.
 - **Automatização:** A integração permite a execução automática de varreduras e a geração de relatórios, economizando tempo e reduzindo o esforço manual.
 
 ## Pré-requisitos
@@ -54,12 +54,13 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 - SCHEDULE_TIME: Horário da execução
 - SCHEDULE_FIRST_DATE: Data da primeira execução (Ano-mês-dia). Ex. 2024-04-01
 - TIMEZONE: Horário mundial Ex.:America/Sao_Paulo
-- QOD: Descreve a confiabilidade da detecção de vulnerabilidade executada ou detecção de produto. (https://docs.greenbone.net/GSM-Manual/gos-20.08/en/reports.html#quality-of-detection-concept)
+- QOD: Descreve a confiabilidade da detecção de vulnerabilidade executada ou detecção de produto. (https://docs.greenbone.net/GSM-Manual/gos-24.10/en/reports.html#quality-of-detection-concept)
 - EXECUTE_NOW: se executará o scanner logo após concluir a configuração
 - EPSS: define se utilizará o EPSS para reclassificar a vulnerabilidade
 - GREENBONE_HOSTS_FILE: Define o arquivo hosts usado para definir os targets no scan.
 - ASSETS_PAGE_SIZE: Define a quantidade de asserts baixados por vez.
 - FILTER_TAG_ID: Define o filtro de id(s) de tag que devem ser usados como filtro dos asserts. Pode ser passado um lista separado por vírgula ','.
+- GAT_BASE_PATH: A base da url do GAT.
 
    ```
    OPENVAS_USERNAME=admin
@@ -78,7 +79,10 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
    ASSETS_PAGE_SIZE=200
    FILTER_TAG_ID=
    ```
-
+4. Deve dar permissão a pasta:
+   ```
+    chmod -R 0777 src
+   ```
 4. Construa e inicie os contêineres:
    ```sh
    docker compose --env-file .env -f docker-compose.yml -p greenbone-community-edition up -d --build
@@ -100,6 +104,12 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
 
    docker compose -f docker-compose.yml -p greenbone-community-edition up -d
    ```
+
+## Como pegar os IDs das tags
+Pode ser passado uma lista de ids, basta separa por vírgula.
+Exemplo: XXX,YYY,ZZZ
+A docmumentação para listar os ids das tags(https://documenter.getpostman.com/view/13656974/Uyxeq9LN#780fe17d-1634-4f47-8a8b-24cfc93f19c7)
+
 ## Execução
 É preciso criar um cronjob ou tarefa agendada para executar o comando abaixo, aconselhamos registrar a execução a cada 1 hora. Ele gera um relatório em CSV e envia para a API do GAT Core.
    ```sh
