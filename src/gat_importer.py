@@ -161,6 +161,42 @@ def check_if_scan_is_finished(connection, bearer, scan_id, is_onpremise):
 
     return response
 
+def build_gat_endpoint(connection):
+    # --- base_path ---
+    raw_base_path = (os.getenv("GAT_BASE_PATH") or "").strip()
+
+    if raw_base_path:
+        base_path = "/" + raw_base_path.lstrip("/")
+        base_path = base_path.rstrip("/")
+    else:
+        base_path = ""
+
+    # --- base url ---
+    raw_url = (connection.gat_url or "").strip().rstrip("/")
+    resource_name = connection.custom_parser_name  # ex: Rapid7
+
+    # garante esquema
+    if not raw_url.startswith(("http://", "https://")):
+        raw_url = "http://" + raw_url
+
+    parsed = urlparse(raw_url)
+
+    scheme = parsed.scheme
+    host = parsed.hostname              # sem porta
+    port = f":{parsed.port}" if parsed.port else ""
+
+    # --- regra do localhost ---
+    is_local = host in ("localhost", "127.0.0.1")
+
+    effective_base_path = "" if is_local else base_path
+
+    # --- resource ---
+    resource = f"{effective_base_path}/vulnerability/upload/api/{resource_name}/?decompress=true"
+
+    # --- final url ---
+    gat_point = f"{scheme}://{host}{port}{resource}"
+
+    return gat_point
 
 def upload_all_scan_files(connection, version, filename, script_path, filepath, on_premise, company_id):
     on_premise = str(on_premise).lower() == "true"
@@ -168,33 +204,8 @@ def upload_all_scan_files(connection, version, filename, script_path, filepath, 
     hora_log = str(datetime.now()).replace(":", "-").replace(" ", "T")
     log_file = open(script_path + "log_{}{}.txt".format(filename, hora_log), "a", newline='')
 
-    base_path = (os.getenv("GAT_BASE_PATH") or "").strip()
-    if base_path and not base_path.startswith("/"):
-        base_path = "/" + base_path
-    base_path = base_path.rstrip("/")
-
-    url = (connection.gat_url or "").strip().rstrip("/")
     bearer = connection.gat_token
-    resource = '/app/vulnerability/upload/api/Rapid7/'
-    resources = connection.custom_parser_name
-
-    parsed = urlparse(url)
-
-    if not parsed.scheme:
-       base = "http://" + url
-       parsed = urlparse(base)
-    else:
-       base = url  # já tem http:// ou https://
-
-    host = parsed.netloc  # ex: "localhost:8080"
-    scheme = parsed.scheme  # "http" ou "https"
-
-    resources = connection.custom_parser_name
-
-    resource = f"{base_path}/vulnerability/upload/api/{resources}/?decompress=true"
-
-
-    gat_point = f"{scheme}://{host}{resource}"
+    gat_point = build_gat_endpoint(connection)
 
     print("GAT endpoint:", gat_point)
     try:
