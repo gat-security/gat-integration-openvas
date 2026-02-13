@@ -240,15 +240,6 @@ def upload_all_scan_files(connection, version, filename, script_path, filepath, 
                     print("Response gerado: {}".format(response))
                     log_file.write("\t\t{} - {}\n".format(datetime.now().strftime("%Y-%m-%d-%I:%M:%S"), response))
 
-                    if os.path.exists(script_path + 'xmls/' + filename + '.xml'):
-                        write_xml_hash(filename, script_path, company_id)
-                        os.remove(script_path + 'xmls/' + filename + '.xml')
-
-                    if os.path.exists(filepath):
-                        os.remove(filepath)
-
-                    if os.path.exists(file_and_path_compressed):
-                        os.remove(file_and_path_compressed)
             else:
                 raise Exception("Erro na compressão do arquivo CSV")
         except Exception as e:

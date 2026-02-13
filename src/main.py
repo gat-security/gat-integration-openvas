@@ -32,8 +32,14 @@ def extract_report_base64(xml_str: str) -> str | None:
     b64 = re.sub(r"\s+", "", m.group(1))  # remove espaços e quebras
     return b64 if b64 else None
 
-def get_reports_csv(gmp, report_ids, csv_results_id):
+def get_reports_csv(gmp, report_ids, csv_results_id, csv_output_path):
     qod_value = os.getenv("QOD", "0")
+
+    # Array para armazenar caminhos dos CSVs gerados
+    generated_csv_paths = []
+
+    # Criar subdiretório com o timestamp
+    os.makedirs(csv_output_path, exist_ok=True)
 
     for report_id in report_ids:
         resp = gmp.get_report(
@@ -63,11 +69,16 @@ def get_reports_csv(gmp, report_ids, csv_results_id):
         if decoded.count(chr(10)) == 1:
             print(f"[SKIP] Report {report_id}, com {decoded.count(chr(10))} resultados")
             continue
-        csv_file_path = f"/app/csvs/{report_id}.csv"
+        csv_file_path = f"{csv_output_path}/{report_id}.csv"
         with open(csv_file_path, "w", encoding="utf-8", newline="") as f:
            f.write(decoded)
 
         print(f"[OK] Report {report_id}: bytes={len(decoded)} linhas={decoded.count(chr(10))}")
+
+        # Adicionar caminho ao array
+        generated_csv_paths.append(csv_file_path)
+
+    return generated_csv_paths
 
     
 def delete_reports(gmp, report_ids):
@@ -82,6 +93,37 @@ def load_epss_data(epss_file):
         for row in csv_reader:
             epss_data[row['cve']] = float(row['epss'])
     return epss_data
+
+def get_last_import_date(file_path='/app/reports_last_import_date'):
+    """
+    Lê a data da última importação do arquivo.
+    Se o arquivo não existir, cria um com a data de hoje - 1 dia (UTC).
+
+    Args:
+        file_path (str): Caminho do arquivo com a data da última importação
+
+    Returns:
+        datetime: Data da última importação em UTC
+    """
+    if os.path.exists(file_path):
+        # Ler data do arquivo existente
+        with open(file_path, 'r', encoding='utf-8') as f:
+            date_str = f.read().strip()
+            try:
+                last_import_date = datetime.fromisoformat(date_str)
+                print(f"Data da última importação lida: {last_import_date}")
+                return last_import_date
+            except ValueError:
+                print(f"Erro ao parsear data do arquivo: {date_str}")
+                last_import_date = datetime.now(pytz.UTC) - timedelta(days=1)
+                return last_import_date
+    else:
+        # Criar arquivo com data de hoje - 1 dia (UTC)
+        last_import_date = datetime.now(pytz.UTC) - timedelta(days=1)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(last_import_date.isoformat())
+        print(f"Arquivo '{file_path}' criado com data: {last_import_date}")
+        return last_import_date
 
 def classify_severity(epss):
     if epss < 0.10:
@@ -203,8 +245,6 @@ def main():
     password = os.getenv('OPENVAS_PASSWORD')
     on_premise = os.getenv('ONPREMISE')
 
-    csv_path = '/app/csvs/'
-    
     credential = Credential(
         gat_url=os.getenv('GAT_URL'),
         gat_token=os.getenv('GAT_TOKEN'),
@@ -224,136 +264,254 @@ def main():
 
             reports = gmp.get_reports(details=False, ignore_pagination=True)
             report_response_str = ElementTree.tostring(reports, encoding='unicode')
+            print(f"Total de reports encontrados: {len(reports.findall('.//report'))}")
             
             root = ElementTree.fromstring(report_response_str)
+
+            # Obter data da última importação
+            reports_last_import_date = get_last_import_date()
+
             report_ids = []
             for report in root.findall('.//report'):
+                report_ids.append(report.get('id'))
                 scan_status = report.find('scan_run_status')
+                report_scan_end_datetime = report.find('scan_end')
+
+                # Verificar se status é 'Done' E se a data de término é posterior à última importação
                 if scan_status is not None and scan_status.text == 'Done':
-                    report_ids.append(report.get('id'))
+                    if report_scan_end_datetime is not None and report_scan_end_datetime.text:
+                        try:
+                            # Parse da data de término do scan
+                            scan_end_dt = datetime.fromisoformat(report_scan_end_datetime.text.replace('Z', '+00:00'))
+
+                            # Comparar com a data da última importação
+                            if scan_end_dt > reports_last_import_date:
+                                report_ids.append(report.get('id'))
+                                print(f"  -> Relatório incluído (data {scan_end_dt} > {reports_last_import_date})")
+                            else:
+                                print(f"  -> Relatório ignorado (data {scan_end_dt} <= {reports_last_import_date})")
+                        except ValueError as e:
+                            print(f"  -> Erro ao parsear data do scan: {report_scan_end_datetime.text} - {e}")
+                    else:
+                        print(f"  -> Relatório sem data de término, adicionado por padrão")
+                        report_ids.append(report.get('id'))
             unique_report_ids = list(set(report_ids))
-            
-            get_reports_csv(gmp, unique_report_ids, csv_results_id)
-                                    
-            for filename in os.listdir(csv_path):
-                if filename.endswith('.csv'):
-                    file_path = os.path.join(csv_path, filename)
-                    print(f"Processando o arquivo: {filename}")
-                    filename_without_extension = os.path.splitext(filename)[0]
+            print(f"Total de reports únicos com status 'Done': {len(unique_report_ids)}")
 
-                    with open(file_path, 'r', encoding='utf-8') as file_input:
-                        csv_reader = list(csv.reader(file_input))
-                    
-                    with open(file_path, 'w', newline='', encoding='utf-8') as file_output:
-                        csv_writer = csv.writer(file_output)
-                        
-                        if csv_reader:
-                            original_header = csv_reader[0]
-                            original_header[18] = "RECOMENDATION"
-                            original_header[19] = "MITIGATION"
-                            original_header[20] = "TEST"
-
-                            cve_headers = ["CVE_LIST"] * 25
-
-                            ref_headers = []
-                            for _ in range(25):
-                                ref_headers += ["TITLE_REFERENCE", "URL_REFERENCE"]
+            # Gerar timestamp para o subdiretório
+            generation_timestamp = datetime.now(local_timezone).strftime('%Y%m%d_%H%M%S')
+            csv_path = '/app/csvs/{}'.format(generation_timestamp)
+            reports_csv_paths = get_reports_csv(gmp, unique_report_ids, csv_results_id, csv_path)
+            print(f"Total de CSVs gerados: {len(reports_csv_paths)}")
 
 
-                            header = (
-                                ["FERRAMENTA"]
-                                + original_header[:12]
-                                + cve_headers
-                                + ["EPSS", "DESCRIPTION"]
-                                + original_header[13:18]
 
-                                + ["TITLE_RECOMENDATION"] + [original_header[18]]
-                                + ["TITLE_MITIGATION"]   + [original_header[19]]
+            # Dicionário para mapear/contar registros por chave (primeira coluna)
+            # Estrutura: { "target/IP": { "count": N, "file_number": M } }
+            target_counts = {}
+            # MOCK DATA PARA TESTES - Comentar para usar dados reais dos CSVs
+            # target_counts = {
+            #     "127.0.0.1": {"count": 7000, "file_number": 0},
+            #     "127.0.0.2": {"count": 2000, "file_number": 0},
+            #     "127.0.0.3": {"count": 2500, "file_number": 0},
+            #     "127.0.0.4": {"count": 1000, "file_number": 0},
+            #     "127.0.0.5": {"count": 4500, "file_number": 0},
+            # }
+            max_targets_per_file = 5000
 
-                                + ["TITLE_TEST"] + [original_header[20]]
-                                + ["TITLE_TEST"] + [original_header[20]]
-                                + ["TITLE_TEST"] + [original_header[20]]
+            for file_path in reports_csv_paths:
+                print(f"Processando o arquivo: {file_path}")
 
-                                + ref_headers
+                with open(file_path, 'r', encoding='utf-8') as file_input:
+                    csv_reader = list(csv.reader(file_input))
 
-                                + original_header[23:]
-                            )
+                for row in csv_reader[1:]:
+                    if any(field.strip() for field in row):
+                        # Extrai a chave (IP/target) da primeira coluna
+                        key = row[0].strip() if row else ""
+                        if key:
+                            if key not in target_counts:
+                                target_counts[key] = {
+                                    "count": 0,
+                                    "file_number": 0
+                                }
+                            target_counts[key]["count"] += 1
 
-                            csv_writer.writerow(header)
+            # Determinar quantos arquivos serão necessários para cada target/IP com base no limite máximo
+            # Todos os registros de um mesmo target/IP devem ser agrupados, mesmo que ultrapasse o total de 5000 registros, para evitar fragmentação dos dados. O número do arquivo é incrementado apenas quando um novo target/IP é processado e o limite for ser atingido
+            # Exemplo 1: Se um target/IP tiver 12000 registros, ele será processado em um único arquivo (file_number = 0) para manter os dados agrupados, mesmo que ultrapasse o limite de 5000 registros. O próximo target/IP começará a ser processado no próximo arquivo (file_number = 1).
+            # Exemplo 2: Se um target/IP tiver 3000 registros, ele será processado em um único arquivo (file_number = 0) e o próximo target/IP começará a ser processado no mesmo arquivo (file_number = 0) até que o total de registros atinja o limite de 5000. Quando o limite for atingido, o próximo target/IP
+            # Exemplo 3: Se um target/IP tiver 4000 registros e o próximo target/IP tiver 2000 registros, eles serão colocados em arquivos diferentes pois o limite será ultrapassado
+            # Calcular file_number para cada target/IP
+            current_file_number = 0
+            records_in_current_file = 0
 
+            # Ordenar targets por contagem decrescente (maiores primeiro - First Fit Decreasing)
+            sorted_targets = sorted(target_counts.items(), key=lambda x: x[1]["count"], reverse=True)
 
-                        for row in csv_reader[1:]:
-                            if any(field.strip() for field in row):
+            for target_key, target_info in sorted_targets:
+                target_record_count = target_info["count"]
 
-                                if len(row) < 24:
-                                    row = row + [""] * (24 - len(row))
+                # Verificar se adicionar este target ultrapassaria o limite
+                if records_in_current_file + target_record_count > max_targets_per_file and records_in_current_file > 0:
+                    # Incrementar para próximo arquivo
+                    current_file_number += 1
+                    records_in_current_file = 0
 
-                                if str(row[5]).strip() == "Log":
-                                    row[5] = "INFO"
+                # Atribuir file_number ao target
+                target_counts[target_key]["file_number"] = current_file_number
 
-                                impact_info = f"<br/><br/>Impact: {row[17]}" if row[17] else ""
-                                vulnerability_insights = f"<br/><br/>Vulnerability Insights: {row[20]}" if row[20] else ""
-                                vulnerability_method = f"<br/><br/>Vulnerability Detection Method: {row[21]}" if row[21] else ""
-                                row[9] = f"{row[9]}{impact_info}{vulnerability_insights}{vulnerability_method}"
+                # Adicionar contagem ao arquivo atual
+                records_in_current_file += target_record_count
 
-                                row.append(row[18])
-                                row[14] = ''
-                                if not row[2]:
-                                    row[2] = 0
-                                if not row[3]:
-                                    row[3] = 'tcp'
+            # Header fixo do CSV
+            FIXED_HEADER = [
+                "FERRAMENTA", "IP", "Hostname", "Port", "Port Protocol", "CVSS", "Severity", "QoD",
+                "Solution Type", "NVT Name", "Summary", "Specific Result", "NVT OID",
+                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+                "CVE_LIST", "CVE_LIST", "CVE_LIST",
+                "EPSS", "DESCRIPTION", "Task ID", "Task Name", "Timestamp", "Result ID", "Impact",
+                "TITLE_RECOMENDATION", "RECOMENDATION", "TITLE_MITIGATION", "MITIGATION",
+                "TITLE_TEST", "TEST", "TITLE_TEST", "TEST", "TITLE_TEST", "TEST",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+                "TITLE_REFERENCE", "URL_REFERENCE",
+                "BIDs", "CERTs", "Other References"
+            ]
 
-                                if len(row) < 24:
-                                    row = row + [""] * (24 - len(row))
+            # Criar e inicializar arquivos de saída com headers
+            output_files = {}
+            max_file_number = max([target_counts[key]["file_number"] for key in target_counts], default=0)
 
-                                description = "\n".join(x for x in [row[9], row[10], row[17]] if str(x).strip())
+            for file_num in range(max_file_number + 1):
+                output_filename = f'openvas_{generation_timestamp}_{file_num}.csv'
+                output_path = f'{csv_path}/{output_filename}'
+                output_files[file_num] = {
+                    'path': output_path,
+                    'filename': output_filename,
+                    'writer': None,
+                    'file_handle': open(output_path, 'w', newline='', encoding='utf-8')
+                }
+                csv_writer = csv.writer(output_files[file_num]['file_handle'])
+                csv_writer.writerow(FIXED_HEADER)
+                output_files[file_num]['writer'] = csv_writer
 
-                                title_recomendation = row[18][:100] if row[18] else ""
-                                title_mitigation   = row[19][:100] if row[19] else ""
-                                title_test_c20 = row[20][:100] if row[20] else ""
-                                title_test_c21 = row[21][:100] if row[21] else ""
-                                title_test_c22 = row[22][:100] if row[22] else ""
+            # Processar arquivos de entrada (relatórios)
+            for file_path in reports_csv_paths:
+                print(f"Processando o report: {file_path}")
 
-                                # CVEs
-                                cves_raw = row[12] if len(row) > 12 else ""
-                                cve_list = [c.strip() for c in cves_raw.split(",") if c.strip()]
-                                cve_cols = (cve_list + [""] * 25)[:25]
-                                cve_0 = cve_cols[0]
+                with open(file_path, 'r', encoding='utf-8') as file_input:
+                    csv_reader = list(csv.reader(file_input))
 
-                                epss_score = ""
-                                if ('EPSS' in os.environ) and cve_0 and (cve_0 in epss_data):
-                                    epss_score = epss_data[cve_0]
+                # Processar dados
+                for row in csv_reader[1:]:
+                    if any(field.strip() for field in row):
+                        # Obter IP (primeira coluna) para determinar o arquivo de saída
+                        target_ip = row[0].strip() if row else ""
 
-                                refs_raw = row[24] if len(row) > 24 else ""
-                                refs_list = [r.strip() for r in refs_raw.split(",") if r.strip()]
+                        # Se o IP não está em target_counts, pular
+                        if target_ip not in target_counts:
+                            continue
 
-                                ref_pairs = []
-                                for i in range(25):
-                                    v = refs_list[i] if i < len(refs_list) else ""
-                                    ref_pairs += [v, v]
+                        output_file_number = target_counts[target_ip]["file_number"]
 
-                                row = (
-                                    row[:12]
-                                    + cve_cols
-                                    + [epss_score, description]
-                                    + row[13:18]
-                                    + [title_recomendation, row[18]]
-                                    + [title_mitigation,   row[19]]
-                                    + [title_test_c20,     row[20]]
-                                    + [title_test_c21,     row[21]]
-                                    + [title_test_c22,     row[22]]
+                        if len(row) < 24:
+                            row = row + [""] * (24 - len(row))
 
-                                    + ref_pairs
+                        if str(row[5]).strip() == "Log":
+                            row[5] = "INFO"
 
-                                    + row[23:]
-                                )
+                        impact_info = f"<br/><br/>Impact: {row[17]}" if row[17] else ""
+                        vulnerability_insights = f"<br/><br/>Vulnerability Insights: {row[20]}" if row[20] else ""
+                        vulnerability_method = f"<br/><br/>Vulnerability Detection Method: {row[21]}" if row[21] else ""
+                        row[9] = f"{row[9]}{impact_info}{vulnerability_insights}{vulnerability_method}"
 
-                                csv_writer.writerow(["OpenVAS"] + row)
+                        row.append(row[18])
+                        row[14] = ''
+                        if not row[2]:
+                            row[2] = 0
+                        if not row[3]:
+                            row[3] = 'tcp'
 
+                        if len(row) < 24:
+                            row = row + [""] * (24 - len(row))
 
-                    print(f"Arquivo {filename} processado com sucesso.\n")
-                    gat.upload_all_scan_files(credential, version, filename_without_extension, csv_path, os.path.join(csv_path, filename), on_premise, 1)
-            # delete_reports(gmp, unique_report_ids)        
+                        description = "\n".join(x for x in [row[9], row[10], row[17]] if str(x).strip())
+
+                        title_recomendation = row[18][:100] if row[18] else ""
+                        title_mitigation   = row[19][:100] if row[19] else ""
+                        title_test_c20 = row[20][:100] if row[20] else ""
+                        title_test_c21 = row[21][:100] if row[21] else ""
+                        title_test_c22 = row[22][:100] if row[22] else ""
+
+                        # CVEs
+                        cves_raw = row[12] if len(row) > 12 else ""
+                        cve_list = [c.strip() for c in cves_raw.split(",") if c.strip()]
+                        cve_cols = (cve_list + [""] * 25)[:25]
+                        cve_0 = cve_cols[0]
+
+                        epss_score = ""
+                        if ('EPSS' in os.environ) and cve_0 and (cve_0 in epss_data):
+                            epss_score = epss_data[cve_0]
+
+                        refs_raw = row[24] if len(row) > 24 else ""
+                        refs_list = [r.strip() for r in refs_raw.split(",") if r.strip()]
+
+                        ref_pairs = []
+                        for i in range(25):
+                            v = refs_list[i] if i < len(refs_list) else ""
+                            ref_pairs += [v, v]
+
+                        row = (
+                            row[:12]
+                            + cve_cols
+                            + [epss_score, description]
+                            + row[13:18]
+                            + [title_recomendation, row[18]]
+                            + [title_mitigation,   row[19]]
+                            + [title_test_c20,     row[20]]
+                            + [title_test_c21,     row[21]]
+                            + [title_test_c22,     row[22]]
+
+                            + ref_pairs
+
+                            + row[23:]
+                        )
+
+                        # Escrever no arquivo de saída correto
+                        output_files[output_file_number]['writer'].writerow(["OpenVAS"] + row)
+
+                print(f"Report {file_path} processado com sucesso.\n")
+
+            # Fechar todos os arquivos de saída
+            for file_num in output_files:
+                output_files[file_num]['file_handle'].close()
+                print(f"Arquivo de saída {output_files[file_num]['filename']} finalizado.")
+
+                filename_without_extension = os.path.splitext(os.path.basename(output_files[file_num]['path']))[0]
+                print(f"Enviando {output_files[file_num]['path']} para GAT...")
+                gat.upload_all_scan_files(credential, version, filename_without_extension, csv_path, output_files[file_num]['path'], on_premise, 1)
+
+            # Atualizar o arquivo reports_last_import_date com o timestamp atual
+            with open('/app/reports_last_import_date', 'w', encoding='utf-8') as f:
+                f.write(datetime.now(pytz.UTC).isoformat())
+
+        # Deletar o csv_path e o conteúdo
+        # Vamos manter por enquanto para análise e debug, mas a intenção é limpar após o envio para o GAT
+        # shutil.rmtree(csv_path)
+
+        gmp.authenticate(username, password)
+        delete_reports(gmp, unique_report_ids)
         print("Execução concluída.\n")
 
     except GvmError as e:
