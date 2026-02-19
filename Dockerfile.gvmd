@@ -1,4 +1,4 @@
-FROM registry.community.greenbone.net/community/gvmd:stable
+FROM registry.community.greenbone.net/community/gvmd:latest
 
 USER root
 

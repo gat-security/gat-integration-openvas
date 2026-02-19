@@ -99,11 +99,13 @@ https://greenbone.github.io/docs/latest/22.4/container/index.html
    docker compose -f docker-compose.yml -p greenbone-community-edition restart
    ```
 
-6. Em caso de necessidade de atualizar os containers
-   ```sh
+6. Em caso de necessidade de atualizar os containers (incluindo atualização do feed de NVTs, CVEs, CPEs, CERT-Bund e DFN-CERT)
+   ```sh 
+   docker compose -f docker-compose.yml -p greenbone-community-edition down
+
    docker compose -f docker-compose.yml -p greenbone-community-edition pull
 
-   docker compose -f docker-compose.yml -p greenbone-community-edition up -d
+   docker compose --env-file .env -f docker-compose.yml -p greenbone-community-edition up -d
    ```
 
 ## Como pegar os IDs das tags

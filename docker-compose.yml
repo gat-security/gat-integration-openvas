@@ -9,35 +9,41 @@ services:
       - vt_data_vol:/mnt
 
   notus-data:
-    image: registry.community.greenbone.net/community/notus-data:latest
+    image: registry.community.greenbone.net/community/notus-data
     environment:
-      FEED_RELEASE: "latest"
+      KEEP_ALIVE: 1
     volumes:
       - notus_data_vol:/mnt
 
   scap-data:
-    image: registry.community.greenbone.net/community/scap-data:latest
+    image: registry.community.greenbone.net/community/scap-data
     environment:
-      FEED_RELEASE: "latest"
+      KEEP_ALIVE: 1
     volumes:
       - scap_data_vol:/mnt
 
   cert-bund-data:
-    image: registry.community.greenbone.net/community/cert-bund-data:latest
+    image: registry.community.greenbone.net/community/cert-bund-data
+    environment:
+      KEEP_ALIVE: 1
     volumes:
       - cert_data_vol:/mnt
 
   dfn-cert-data:
-    image: registry.community.greenbone.net/community/dfn-cert-data:latest
+    image: registry.community.greenbone.net/community/dfn-cert-data
+    environment:
+      KEEP_ALIVE: 1
     volumes:
       - cert_data_vol:/mnt
     depends_on:
-      - cert-bund-data
+      cert-bund-data:
+        condition: service_healthy
 
   data-objects:
     image: registry.community.greenbone.net/community/data-objects
     environment:
       FEED_RELEASE: "24.10"
+      KEEP_ALIVE: 1
     volumes:
       - data_objects_vol:/mnt
 
@@ -45,25 +51,37 @@ services:
     image: registry.community.greenbone.net/community/report-formats
     environment:
       FEED_RELEASE: "24.10"
+      KEEP_ALIVE: 1
     volumes:
       - data_objects_vol:/mnt
     depends_on:
-      - data-objects
+      data-objects:
+        condition: service_healthy
 
   gpg-data:
-    image: registry.community.greenbone.net/community/gpg-data:latest
+    image: registry.community.greenbone.net/community/gpg-data
     volumes:
       - gpg_data_vol:/mnt
 
   redis-server:
-    image: registry.community.greenbone.net/community/redis-server:stable
+    image: registry.community.greenbone.net/community/redis-server
     restart: on-failure
     volumes:
       - redis_socket_vol:/run/redis/
 
   pg-gvm:
     image: registry.community.greenbone.net/community/pg-gvm:stable
-    restart: on-failure
+    restart: on-failure:10
+    volumes:
+      - psql_data_vol:/var/lib/postgresql
+      - psql_socket_vol:/var/run/postgresql
+    depends_on:
+      pg-gvm-migrator:
+        condition: service_completed_successfully
+
+  pg-gvm-migrator:
+    image: registry.community.greenbone.net/community/pg-gvm-migrator:stable
+    restart: no
     volumes:
       - psql_data_vol:/var/lib/postgresql
       - psql_socket_vol:/var/run/postgresql
@@ -73,7 +91,6 @@ services:
       context: .
       dockerfile: Dockerfile.gvmd
     restart: on-failure
-    user: "0:0"
     volumes:
       - ./src:/app
       - gvmd_data_vol:/var/lib/gvm
@@ -108,15 +125,15 @@ services:
       pg-gvm:
         condition: service_started
       scap-data:
-        condition: service_completed_successfully
+        condition: service_healthy
       cert-bund-data:
-        condition: service_completed_successfully
+        condition: service_healthy
       dfn-cert-data:
-        condition: service_completed_successfully
+        condition: service_healthy
       data-objects:
-        condition: service_completed_successfully
+        condition: service_healthy
       report-formats:
-        condition: service_completed_successfully
+        condition: service_healthy
 
   gsa:
     image: registry.community.greenbone.net/community/gsa:stable
@@ -126,7 +143,8 @@ services:
     volumes:
       - gvmd_socket_vol:/run/gvmd
     depends_on:
-      - gvmd
+      gvmd:
+        condition: service_started
 
   configure-openvas:
     image: registry.community.greenbone.net/community/openvas-scanner:stable
@@ -143,12 +161,6 @@ services:
         chmod 644 /mnt/openvas_log.conf
         touch /var/log/openvas/openvas.log
         chmod 666 /var/log/openvas/openvas.log
-    depends_on:
-      - vulnerability-tests
-      - gpg-data
-      - notus-data
-      - scap-data
-      - cert-bund-data
 
   openvas:
     image: registry.community.greenbone.net/community/openvas-scanner:stable
@@ -181,10 +193,16 @@ services:
     depends_on:
       vulnerability-tests:
         condition: service_completed_successfully
+      notus-data:
+        condition: service_healthy
       configure-openvas:
         condition: service_completed_successfully
       gpg-data:
         condition: service_completed_successfully
+    networks:
+      default:
+        aliases:
+          - openvasd
 
   ospd-openvas:
     image: registry.community.greenbone.net/community/ospd-openvas:stable
@@ -197,14 +215,16 @@ services:
       - seccomp=unconfined
       - apparmor=unconfined
     command:
-      - "ospd-openvas"
-      - "-f"
-      - "--config"
-      - "/etc/gvm/ospd-openvas.conf"
-      - "--notus-feed-dir"
-      - "/var/lib/notus/advisories"
-      - "-m"
-      - "666"
+      [
+        "ospd-openvas",
+        "-f",
+        "--config",
+        "/etc/gvm/ospd-openvas.conf",
+        "--notus-feed-dir",
+        "/var/lib/notus/advisories",
+        "-m",
+        "666",
+      ]
     volumes:
       - gpg_data_vol:/etc/openvas/gnupg
       - vt_data_vol:/var/lib/openvas/plugins
@@ -218,10 +238,10 @@ services:
         condition: service_started
       gpg-data:
         condition: service_completed_successfully
-      vulnerability-tests:
-        condition: service_completed_successfully
       configure-openvas:
         condition: service_completed_successfully
+      notus-data:
+        condition: service_healthy
 
   gvm-tools:
     image: registry.community.greenbone.net/community/gvm-tools:stable
@@ -231,6 +251,16 @@ services:
     depends_on:
       - gvmd
       - ospd-openvas
+
+  greenbone-feed-sync:
+    image: registry.community.greenbone.net/community/greenbone-feed-sync
+    volumes:
+      - vt_data_vol:/var/lib/openvas/plugins
+      - notus_data_vol:/var/lib/notus
+      - gvmd_data_vol:/var/lib/gvm
+      - scap_data_vol:/var/lib/gvm/scap-data
+      - cert_data_vol:/var/lib/gvm/cert-data
+      - data_objects_vol:/var/lib/gvm/data-objects/gvmd
 
 volumes:
   gpg_data_vol:

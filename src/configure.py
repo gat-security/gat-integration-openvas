@@ -45,6 +45,7 @@ def get_scanner_id(gmp):
 
 def get_config_id(gmp, config_name='Full and fast'):
     configs_response = gmp.get_scan_configs()
+    print("Configs disponíveis:", [config.find('name').text for config in configs_response.findall('config')])
     for config in configs_response.findall('config'):
         if config.find('name').text == config_name:
             return config.get('id')
@@ -152,8 +153,12 @@ def main():
             config_id = get_config_id(gmp)
             schedule_id = get_schedule_id(gmp, schedule_type, schedule_date, schedule_time)
 
-            if not scanner_id or not config_id:
-                print('Error: Scanner ID ou Config ID não encontrado')
+            if not scanner_id:
+                print('Error: Scanner ID não encontrado')
+                return
+
+            if not config_id:
+                print('Error: Config ID não encontrado')
                 return
 
             with open(os.getenv("GREENBONE_HOSTS_FILE", ""), 'r') as file:
