@@ -18,6 +18,34 @@ import re
 import base64
 from gvm.transforms import EtreeTransform
 
+# Header fixo do CSV (global)
+FIXED_HEADER = [
+    "FERRAMENTA", "IP", "Hostname", "Port", "Port Protocol", "CVSS", "Severity", "QoD",
+    "Solution Type", "NVT Name", "Summary", "Specific Result", "NVT OID",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "EPSS", "DESCRIPTION", "Task ID", "Task Name", "Timestamp", "Result ID", "Impact",
+    "TITLE_RECOMENDATION", "RECOMENDATION", "TITLE_MITIGATION", "MITIGATION",
+    "TITLE_TEST", "TEST", "TITLE_TEST", "TEST", "TITLE_TEST", "TEST",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE",
+    "BIDs", "CERTs", "Other References"
+]
+
+# número de colunas do "out" (sem a coluna FERRAMENTA)
+TOTAL_OUT_COLS = len(FIXED_HEADER) - 1
+
 class Credential:
     def __init__(self, gat_url, gat_token, custom_parser_name):
         self.gat_url = gat_url
@@ -221,8 +249,6 @@ def cleanup_files(output_folder, keep_file):
         if file != keep_file:
             os.remove(file_path)
             print(f"Removido: {file_path}")
-
-TOTAL_OUT_COLS = len(FIXED_HEADER) - 1
 
 def clip100(s: str) -> str:
     s = "" if s is None else str(s)
@@ -548,31 +574,6 @@ def main():
 
                 # Adicionar contagem ao arquivo atual
                 records_in_current_file += target_record_count
-
-            # Header fixo do CSV
-            FIXED_HEADER = [
-                "FERRAMENTA", "IP", "Hostname", "Port", "Port Protocol", "CVSS", "Severity", "QoD",
-                "Solution Type", "NVT Name", "Summary", "Specific Result", "NVT OID",
-                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
-                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
-                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
-                "CVE_LIST", "CVE_LIST", "CVE_LIST",
-                "EPSS", "DESCRIPTION", "Task ID", "Task Name", "Timestamp", "Result ID", "Impact",
-                "TITLE_RECOMENDATION", "RECOMENDATION", "TITLE_MITIGATION", "MITIGATION",
-                "TITLE_TEST", "TEST", "TITLE_TEST", "TEST", "TITLE_TEST", "TEST",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE",
-                "BIDs", "CERTs", "Other References"
-            ]
 
             # Criar e inicializar arquivos de saída com headers
             output_files = {}
