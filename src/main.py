@@ -25,7 +25,7 @@ FIXED_HEADER = [
     "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
     "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
     "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
-    "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST",
     "EPSS", "DESCRIPTION", "Task ID", "Task Name", "Timestamp", "Result ID", "Impact",
     "TITLE_RECOMENDATION", "RECOMENDATION", "TITLE_MITIGATION", "MITIGATION",
     "TITLE_TEST", "TEST", "TITLE_TEST", "TEST", "TITLE_TEST", "TEST",
@@ -385,35 +385,52 @@ def build_out_row_from_openvas_src(
     out[11] = (src[11].strip() if len(src) > 11 else "") # NVT OID
 
     # CVE_LIST 25 colunas: out[12..36]
-    base_cve_idx = 12
-    for k in range(25):
+    cve_count = FIXED_HEADER.count("CVE_LIST")   # 26 nesse header
+    base_cve_idx = FIXED_HEADER.index("CVE_LIST") - 1  # -1 pq out não tem FERRAMENTA
+
+    cve_cols = (cve_list + [""] * cve_count)[:cve_count]
+
+    for k in range(cve_count):
         out[base_cve_idx + k] = cve_cols[k]
 
     # EPSS, DESCRIPTION
-    out[37] = safe_str(epss_score)    # EPSS
-    out[38] = description             # DESCRIPTION
+    out[FIXED_HEADER.index("EPSS") - 1] = safe_str(epss_score)
+    out[FIXED_HEADER.index("DESCRIPTION") - 1] = description
 
     # Task ID..Impact (5 colunas)
     # No seu slice antigo era row[13:18] => 5 colunas.
     # Aqui vou manter src[13..17] por compatibilidade com o que você fazia.
-    out[39] = (src[13].strip() if len(src) > 13 else "")  # Task ID
-    out[40] = (src[14].strip() if len(src) > 14 else "")  # Task Name
-    out[41] = (src[15].strip() if len(src) > 15 else "")  # Timestamp
-    out[42] = (src[16].strip() if len(src) > 16 else "")  # Result ID
-    out[43] = impact_text                                  # Impact
+    out[FIXED_HEADER.index("Task ID") - 1]   = (src[13].strip() if len(src) > 13 else "")
+    out[FIXED_HEADER.index("Task Name") - 1] = (src[14].strip() if len(src) > 14 else "")
+    out[FIXED_HEADER.index("Timestamp") - 1] = (src[15].strip() if len(src) > 15 else "")
+    out[FIXED_HEADER.index("Result ID") - 1] = (src[16].strip() if len(src) > 16 else "")
+    out[FIXED_HEADER.index("Impact") - 1]    = impact_text
 
     # Recommendation / mitigation / tests (cada um title + conteúdo)
-    out[44] = title_recommendation
-    out[45] = recommendation
-    out[46] = title_mitigation
-    out[47] = mitigation
+    out[FIXED_HEADER.index("TITLE_RECOMENDATION") - 1] = title_recommendation
+    out[FIXED_HEADER.index("RECOMENDATION") - 1]       = recommendation
 
-    out[48] = title_test_c20
-    out[49] = test20
-    out[50] = title_test_c21
-    out[51] = test21
-    out[52] = title_test_c22
-    out[53] = test22
+    out[FIXED_HEADER.index("TITLE_MITIGATION") - 1] = title_mitigation
+    out[FIXED_HEADER.index("MITIGATION") - 1]       = mitigation
+
+    # pegar todas as posições de TITLE_TEST
+    title_test_indexes = [
+        i for i, v in enumerate(FIXED_HEADER) if v == "TITLE_TEST"
+    ]
+
+    test_indexes = [
+        i for i, v in enumerate(FIXED_HEADER) if v == "TEST"
+    ]
+
+    # preencher os 3 pares
+    out[title_test_indexes[0] - 1] = title_test_c20
+    out[test_indexes[0] - 1]       = test20
+
+    out[title_test_indexes[1] - 1] = title_test_c21
+    out[test_indexes[1] - 1]       = test21
+
+    out[title_test_indexes[2] - 1] = title_test_c22
+    out[test_indexes[2] - 1]       = test22
 
 
     # refs: começa onde o header diz (menos 1)
