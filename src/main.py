@@ -418,7 +418,9 @@ def build_out_row_from_openvas_src(
 
     # References: 25 pares => 50 cols
     # começam em out[54] até out[103]
-    ref_start = 54
+    ref_start = FIXED_HEADER.index("TITLE_REFERENCE")
+    print("ref_start", ref_start, "len(out)", len(out), "len(ref_pairs)", len(ref_pairs))
+    print("vai escrever até", ref_start + 49)
     for k in range(50):
         out[ref_start + k] = ref_pairs[k]
 
