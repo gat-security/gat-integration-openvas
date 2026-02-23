@@ -424,7 +424,7 @@ def build_out_row_from_openvas_src(
         out.extend([""] * (needed - len(out)))
     for k in range(50):
         out[ref_start + k] = ref_pairs[k]
-
+    assert len(out) == len(FIXED_HEADER), f"out={len(out)} header={len(FIXED_HEADER)}"
     # Últimos: BIDs, CERTs, Other References
     # Você tem no header, mas seu CSV de entrada pode ou não ter essas infos.
     # Ajuste os índices conforme seu CSV real.
