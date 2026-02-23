@@ -221,9 +221,8 @@ def cleanup_files(output_folder, keep_file):
         if file != keep_file:
             os.remove(file_path)
             print(f"Removido: {file_path}")
-# --- coloque isso perto do FIXED_HEADER ---
-# (você pode deixar FIXED_HEADER como está)
-TOTAL_OUT_COLS = len(FIXED_HEADER) - 1  # sem "FERRAMENTA"
+
+TOTAL_OUT_COLS = len(FIXED_HEADER) - 1
 
 def clip100(s: str) -> str:
     s = "" if s is None else str(s)
@@ -242,41 +241,12 @@ def build_out_row_from_openvas_src(
     epss_data: dict,
     epss_enabled: bool
 ) -> list[str]:
-    """
-    Melhor solução:
-    - NÃO usa slices para rearranjar um row mutável
-    - cria uma lista 'out' com tamanho FIXO = len(FIXED_HEADER)-1
-    - preenche por posição (índice) de forma determinística
-    - nunca "sobrepõe" colunas
-    """
 
-    # garante que src tenha um mínimo de colunas para evitar IndexError
-    # (ajuste esse mínimo conforme seu CSV de entrada real)
     if src is None:
         src = []
     src = [safe_str(x) for x in src]
 
     out = [""] * TOTAL_OUT_COLS
-
-    # ------------------------------------------------------------------
-    # IMPORTANTE:
-    # Você PRECISA ajustar os índices abaixo conforme o CSV de entrada do OpenVAS.
-    # Aqui eu mantive o que o seu código já sugere:
-    #   src[0] => IP
-    #   src[2] => Port
-    #   src[3] => Port Protocol
-    #   src[5] => Severity (Log->INFO)
-    #   src[9] => Summary (e você concatena impacto/insights/method nele)
-    #   src[10] => Specific Result
-    #   src[12] => CVEs raw (separados por vírgula)
-    #   src[17] => Impact (texto)
-    #   src[18] => Recommendation
-    #   src[19] => Mitigation
-    #   src[20], src[21], src[22] => Tests
-    #   src[24] => References raw (separados por vírgula)
-    #
-    # Se o seu CSV de entrada tiver layout diferente, ajuste só esses índices.
-    # ------------------------------------------------------------------
 
     # =============== Normalizações do que você já fazia ===============
     # Severity "Log" vira "INFO"
@@ -375,9 +345,6 @@ def build_out_row_from_openvas_src(
     # 105 BIDs
     # 106 CERTs
     # 107 Other References
-
-    # NOTE: os índices do src abaixo (para preencher IP/Hostname/etc) são suposições do seu CSV.
-    # Ajuste se necessário.
 
     out[0] = (src[0].strip() if len(src) > 0 else "")  # IP
     out[1] = (src[1].strip() if len(src) > 1 else "")  # Hostname
