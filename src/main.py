@@ -370,7 +370,7 @@ def build_out_row_from_openvas_src(
     # 105 BIDs
     # 106 CERTs
     # 107 Other References
-    out = [""] * TOTAL_OUT_COLS
+    out = [""] * (len(FIXED_HEADER) - 1)
     out[0] = (src[0].strip() if len(src) > 0 else "")  # IP
     out[1] = (src[1].strip() if len(src) > 1 else "")  # Hostname
     out[2] = port                                     # Port
@@ -415,20 +415,26 @@ def build_out_row_from_openvas_src(
     out[52] = title_test_c22
     out[53] = test22
 
-    # References: 25 pares => 50 cols
-    # começam em out[54] até out[103]
+
+    # refs: começa onde o header diz (menos 1)
     ref_start = FIXED_HEADER.index("TITLE_REFERENCE") - 1
-    needed = ref_start + len(ref_pairs)  # 54 + 50 = 104
-    if len(out) < needed:
-        out.extend([""] * (needed - len(out)))
-    for k in range(50):
+    bids_idx  = FIXED_HEADER.index("BIDs") - 1
+    certs_idx = FIXED_HEADER.index("CERTs") - 1
+    other_idx = FIXED_HEADER.index("Other References") - 1
+
+    # bloco de refs termina antes do BIDs
+    max_ref_slots = bids_idx - ref_start  # deve dar 50 quando header é o de 25 pares
+
+    # garante ref_pairs no tamanho do bloco
+    ref_pairs = (ref_pairs + [""] * max_ref_slots)[:max_ref_slots]
+
+    for k in range(max_ref_slots):
         out[ref_start + k] = ref_pairs[k]
-    # Últimos: BIDs, CERTs, Other References
-    # Você tem no header, mas seu CSV de entrada pode ou não ter essas infos.
-    # Ajuste os índices conforme seu CSV real.
-    out[103] = (src[25].strip() if len(src) > 25 else "")  # BIDs
-    out[104] = (src[26].strip() if len(src) > 26 else "")  # CERTs
-    out[105] = (src[27].strip() if len(src) > 27 else "")  # Other References
+
+    # últimos campos
+    out[bids_idx]  = (src[25].strip() if len(src) > 25 else "")
+    out[certs_idx] = (src[26].strip() if len(src) > 26 else "")
+    out[other_idx] = (src[27].strip() if len(src) > 27 else "")
 
     # Garantia final de tamanho
     if len(out) != TOTAL_OUT_COLS:
