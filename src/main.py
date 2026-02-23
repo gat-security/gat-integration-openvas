@@ -272,7 +272,6 @@ def build_out_row_from_openvas_src(
         src = []
     src = [safe_str(x) for x in src]
 
-    out = [""] * TOTAL_OUT_COLS
 
     # =============== Normalizações do que você já fazia ===============
     # Severity "Log" vira "INFO"
@@ -371,7 +370,7 @@ def build_out_row_from_openvas_src(
     # 105 BIDs
     # 106 CERTs
     # 107 Other References
-
+    out = [""] * len(FIXED_HEADER)
     out[0] = (src[0].strip() if len(src) > 0 else "")  # IP
     out[1] = (src[1].strip() if len(src) > 1 else "")  # Hostname
     out[2] = port                                     # Port
