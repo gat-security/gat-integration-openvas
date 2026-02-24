@@ -710,7 +710,7 @@ def main():
         # shutil.rmtree(csv_path)
 
         gmp.authenticate(username, password)
-        delete_reports(gmp, unique_report_ids)
+#         delete_reports(gmp, unique_report_ids)
         print("Execução concluída.\n")
 
     except GvmError as e:
