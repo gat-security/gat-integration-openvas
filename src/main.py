@@ -267,7 +267,31 @@ def build_out_row_from_openvas_src(
     epss_data: dict,
     epss_enabled: bool
 ) -> list[str]:
+    """
+    Constrói a linha de saída (`out`) correspondente ao CSV final, baseada
+    estritamente na estrutura definida em `FIXED_HEADER`.
 
+    A lógica deste método NÃO utiliza índices fixos (números mágicos) para
+    posicionar os valores nas colunas. Em vez disso, ele usa a posição das
+    colunas dentro do array `FIXED_HEADER` para determinar dinamicamente
+    onde cada valor deve ser inserido no array `out`.
+
+    Como `out` não contém a coluna "FERRAMENTA" (que é adicionada
+    externamente na hora de escrever o CSV), os índices são calculados
+    com base em:
+
+        índice_real_no_out = FIXED_HEADER.index("NOME_DA_COLUNA") - 1
+
+    Dessa forma:
+    - O header é a única fonte de verdade da estrutura do CSV.
+    - Se a ordem ou quantidade de colunas mudar no `FIXED_HEADER`,
+      o método continua funcionando corretamente.
+    - Evita erros de desalinhamento de colunas e `IndexError`
+      causados por posições hardcoded.
+
+    O array retornado sempre deve ter exatamente
+    `len(FIXED_HEADER) - 1` posições.
+    """
     if src is None:
         src = []
     src = [safe_str(x) for x in src]
@@ -710,7 +734,7 @@ def main():
         # shutil.rmtree(csv_path)
 
         gmp.authenticate(username, password)
-#         delete_reports(gmp, unique_report_ids)
+        delete_reports(gmp, unique_report_ids)
         print("Execução concluída.\n")
 
     except GvmError as e:
