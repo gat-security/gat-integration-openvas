@@ -18,6 +18,34 @@ import re
 import base64
 from gvm.transforms import EtreeTransform
 
+# Header fixo do CSV (global)
+FIXED_HEADER = [
+    "FERRAMENTA", "IP", "Hostname", "Port", "Port Protocol", "CVSS", "Severity", "QoD",
+    "Solution Type", "NVT Name", "Summary", "Specific Result", "NVT OID",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "CVE_LIST", "CVE_LIST", "CVE_LIST",
+    "EPSS", "DESCRIPTION", "Task ID", "Task Name", "Timestamp", "Result ID", "Impact",
+    "TITLE_RECOMENDATION", "RECOMENDATION", "TITLE_MITIGATION", "MITIGATION",
+    "TITLE_TEST", "TEST", "TITLE_TEST", "TEST", "TITLE_TEST", "TEST",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
+    "TITLE_REFERENCE", "URL_REFERENCE",
+    "BIDs", "CERTs", "Other References"
+]
+
+# número de colunas do "out" (sem a coluna FERRAMENTA)
+TOTAL_OUT_COLS = len(FIXED_HEADER) - 1
+
 class Credential:
     def __init__(self, gat_url, gat_token, custom_parser_name):
         self.gat_url = gat_url
@@ -221,7 +249,240 @@ def cleanup_files(output_folder, keep_file):
         if file != keep_file:
             os.remove(file_path)
             print(f"Removido: {file_path}")
-    
+
+def clip100(s: str) -> str:
+    s = "" if s is None else str(s)
+    return s[:100]
+
+def safe_str(v) -> str:
+    return "" if v is None else str(v)
+
+def split_csv_list(raw: str) -> list[str]:
+    if not raw:
+        return []
+    return [x.strip() for x in str(raw).split(",") if x.strip()]
+
+def build_out_row_from_openvas_src(
+    src: list[str],
+    epss_data: dict,
+    epss_enabled: bool
+) -> list[str]:
+    """
+    Constrói a linha de saída (`out`) correspondente ao CSV final, baseada
+    estritamente na estrutura definida em `FIXED_HEADER`.
+
+    A lógica deste método NÃO utiliza índices fixos (números mágicos) para
+    posicionar os valores nas colunas. Em vez disso, ele usa a posição das
+    colunas dentro do array `FIXED_HEADER` para determinar dinamicamente
+    onde cada valor deve ser inserido no array `out`.
+
+    Como `out` não contém a coluna "FERRAMENTA" (que é adicionada
+    externamente na hora de escrever o CSV), os índices são calculados
+    com base em:
+
+        índice_real_no_out = FIXED_HEADER.index("NOME_DA_COLUNA") - 1
+
+    Dessa forma:
+    - O header é a única fonte de verdade da estrutura do CSV.
+    - Se a ordem ou quantidade de colunas mudar no `FIXED_HEADER`,
+      o método continua funcionando corretamente.
+    - Evita erros de desalinhamento de colunas e `IndexError`
+      causados por posições hardcoded.
+
+    O array retornado sempre deve ter exatamente
+    `len(FIXED_HEADER) - 1` posições.
+    """
+    if src is None:
+        src = []
+    src = [safe_str(x) for x in src]
+
+
+    # =============== Normalizações do que você já fazia ===============
+    # Severity "Log" vira "INFO"
+    severity = src[5].strip() if len(src) > 5 else ""
+    if severity == "Log":
+        severity = "INFO"
+
+    # Port default
+    port = src[2].strip() if len(src) > 2 else ""
+    if not port:
+        port = "0"
+
+    protocol = src[3].strip() if len(src) > 3 else ""
+    if not protocol:
+        protocol = "tcp"
+
+    # montar descrição (Summary + Specific Result + Impact) como você fazia
+    summary = src[9] if len(src) > 9 else ""
+    specific_result = src[10] if len(src) > 10 else ""
+    impact_text = src[17] if len(src) > 17 else ""
+    description = "\n".join(x for x in [summary, specific_result, impact_text] if str(x).strip())
+
+    # adicionar (Impact/Insights/Method) no summary (igual seu código)
+    vulnerability_insights = f"<br/><br/>Vulnerability Insights: {src[20]}" if len(src) > 20 and src[20] else ""
+    vulnerability_method   = f"<br/><br/>Vulnerability Detection Method: {src[21]}" if len(src) > 21 and src[21] else ""
+    impact_info            = f"<br/><br/>Impact: {impact_text}" if impact_text else ""
+    summary_augmented = f"{summary}{impact_info}{vulnerability_insights}{vulnerability_method}"
+
+    # CVEs em 25 colunas (seu header tem 25 CVE_LIST repetidos)
+    cves_raw = src[12] if len(src) > 12 else ""
+    cve_list = split_csv_list(cves_raw)
+    cve_cols = (cve_list + [""] * 25)[:25]
+    cve_0 = cve_cols[0]
+
+    # EPSS usando o primeiro CVE
+    epss_score = ""
+    if epss_enabled and cve_0 and cve_0 in epss_data:
+        epss_score = epss_data[cve_0]
+
+    # References em 25 pares (TITLE, URL) => 50 colunas
+    refs_raw = src[24] if len(src) > 24 else ""
+    refs_list = split_csv_list(refs_raw)
+    ref_pairs: list[str] = []
+    for idx in range(25):
+        v = refs_list[idx] if idx < len(refs_list) else ""
+        # title=url=mesmo valor (seu padrão)
+        ref_pairs.extend([v, v])
+
+    # Titles truncados 100
+    recommendation = src[18] if len(src) > 18 else ""
+    mitigation     = src[19] if len(src) > 19 else ""
+    test20         = src[20] if len(src) > 20 else ""
+    test21         = src[21] if len(src) > 21 else ""
+    test22         = src[22] if len(src) > 22 else ""
+
+    title_recommendation = clip100(recommendation)
+    title_mitigation     = clip100(mitigation)
+    title_test_c20       = clip100(test20)
+    title_test_c21       = clip100(test21)
+    title_test_c22       = clip100(test22)
+
+    # =============== Preenchimento determinístico conforme FIXED_HEADER ===============
+    # FIXED_HEADER:
+    #  0  FERRAMENTA (fora)
+    #  1  IP
+    #  2  Hostname
+    #  3  Port
+    #  4  Port Protocol
+    #  5  CVSS
+    #  6  Severity
+    #  7  QoD
+    #  8  Solution Type
+    #  9  NVT Name
+    # 10  Summary
+    # 11  Specific Result
+    # 12  NVT OID
+    # 13..37 CVE_LIST (25)
+    # 38 EPSS
+    # 39 DESCRIPTION
+    # 40 Task ID
+    # 41 Task Name
+    # 42 Timestamp
+    # 43 Result ID
+    # 44 Impact
+    # 45 TITLE_RECOMENDATION
+    # 46 RECOMENDATION
+    # 47 TITLE_MITIGATION
+    # 48 MITIGATION
+    # 49 TITLE_TEST
+    # 50 TEST
+    # 51 TITLE_TEST
+    # 52 TEST
+    # 53 TITLE_TEST
+    # 54 TEST
+    # 55..104 (50 cols) References (25 pares)
+    # 105 BIDs
+    # 106 CERTs
+    # 107 Other References
+    out = [""] * (len(FIXED_HEADER) - 1)
+    out[0] = (src[0].strip() if len(src) > 0 else "")  # IP
+    out[1] = (src[1].strip() if len(src) > 1 else "")  # Hostname
+    out[2] = port                                     # Port
+    out[3] = protocol                                 # Port Protocol
+    out[4] = (src[4].strip() if len(src) > 4 else "")  # CVSS (ajuste se seu CSV não tiver aqui)
+    out[5] = severity                                  # Severity
+    out[6] = (src[6].strip() if len(src) > 6 else "")  # QoD
+    out[7] = (src[7].strip() if len(src) > 7 else "")  # Solution Type
+    out[8] = (src[8].strip() if len(src) > 8 else "")  # NVT Name
+    out[9] = summary_augmented                         # Summary
+    out[10] = specific_result                          # Specific Result
+    out[11] = (src[11].strip() if len(src) > 11 else "") # NVT OID
+
+    # CVE_LIST 25 colunas: out[12..36]
+    cve_count = FIXED_HEADER.count("CVE_LIST")   # 26 nesse header
+    base_cve_idx = FIXED_HEADER.index("CVE_LIST") - 1  # -1 pq out não tem FERRAMENTA
+
+    cve_cols = (cve_list + [""] * cve_count)[:cve_count]
+
+    for k in range(cve_count):
+        out[base_cve_idx + k] = cve_cols[k]
+
+    # EPSS, DESCRIPTION
+    out[FIXED_HEADER.index("EPSS") - 1] = safe_str(epss_score)
+    out[FIXED_HEADER.index("DESCRIPTION") - 1] = description
+
+    # Task ID..Impact (5 colunas)
+    # No seu slice antigo era row[13:18] => 5 colunas.
+    # Aqui vou manter src[13..17] por compatibilidade com o que você fazia.
+    out[FIXED_HEADER.index("Task ID") - 1]   = (src[13].strip() if len(src) > 13 else "")
+    out[FIXED_HEADER.index("Task Name") - 1] = (src[14].strip() if len(src) > 14 else "")
+    out[FIXED_HEADER.index("Timestamp") - 1] = (src[15].strip() if len(src) > 15 else "")
+    out[FIXED_HEADER.index("Result ID") - 1] = (src[16].strip() if len(src) > 16 else "")
+    out[FIXED_HEADER.index("Impact") - 1]    = impact_text
+
+    # Recommendation / mitigation / tests (cada um title + conteúdo)
+    out[FIXED_HEADER.index("TITLE_RECOMENDATION") - 1] = title_recommendation
+    out[FIXED_HEADER.index("RECOMENDATION") - 1]       = recommendation
+
+    out[FIXED_HEADER.index("TITLE_MITIGATION") - 1] = title_mitigation
+    out[FIXED_HEADER.index("MITIGATION") - 1]       = mitigation
+
+    # pegar todas as posições de TITLE_TEST
+    title_test_indexes = [
+        i for i, v in enumerate(FIXED_HEADER) if v == "TITLE_TEST"
+    ]
+
+    test_indexes = [
+        i for i, v in enumerate(FIXED_HEADER) if v == "TEST"
+    ]
+
+    # preencher os 3 pares
+    out[title_test_indexes[0] - 1] = title_test_c20
+    out[test_indexes[0] - 1]       = test20
+
+    out[title_test_indexes[1] - 1] = title_test_c21
+    out[test_indexes[1] - 1]       = test21
+
+    out[title_test_indexes[2] - 1] = title_test_c22
+    out[test_indexes[2] - 1]       = test22
+
+
+    # refs: começa onde o header diz (menos 1)
+    ref_start = FIXED_HEADER.index("TITLE_REFERENCE") - 1
+    bids_idx  = FIXED_HEADER.index("BIDs") - 1
+    certs_idx = FIXED_HEADER.index("CERTs") - 1
+    other_idx = FIXED_HEADER.index("Other References") - 1
+
+    # bloco de refs termina antes do BIDs
+    max_ref_slots = bids_idx - ref_start  # deve dar 50 quando header é o de 25 pares
+
+    # garante ref_pairs no tamanho do bloco
+    ref_pairs = (ref_pairs + [""] * max_ref_slots)[:max_ref_slots]
+
+    for k in range(max_ref_slots):
+        out[ref_start + k] = ref_pairs[k]
+
+    # últimos campos
+    out[bids_idx]  = (src[25].strip() if len(src) > 25 else "")
+    out[certs_idx] = (src[26].strip() if len(src) > 26 else "")
+    out[other_idx] = (src[27].strip() if len(src) > 27 else "")
+
+    # Garantia final de tamanho
+    if len(out) != TOTAL_OUT_COLS:
+        raise Exception(f"out row size mismatch: {len(out)} != {TOTAL_OUT_COLS}")
+
+    return out
+
 def main():
     local_timezone = pytz.timezone(os.getenv('TIMEZONE', 'UTC'))
     today = datetime.now(local_timezone).strftime('%Y-%m-%d')
@@ -304,8 +565,6 @@ def main():
             reports_csv_paths = get_reports_csv(gmp, unique_report_ids, csv_results_id, csv_path)
             print(f"Total de CSVs gerados: {len(reports_csv_paths)}")
 
-
-
             # Dicionário para mapear/contar registros por chave (primeira coluna)
             # Estrutura: { "target/IP": { "count": N, "file_number": M } }
             target_counts = {}
@@ -363,31 +622,6 @@ def main():
 
                 # Adicionar contagem ao arquivo atual
                 records_in_current_file += target_record_count
-
-            # Header fixo do CSV
-            FIXED_HEADER = [
-                "FERRAMENTA", "IP", "Hostname", "Port", "Port Protocol", "CVSS", "Severity", "QoD",
-                "Solution Type", "NVT Name", "Summary", "Specific Result", "NVT OID",
-                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
-                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
-                "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST", "CVE_LIST",
-                "CVE_LIST", "CVE_LIST", "CVE_LIST",
-                "EPSS", "DESCRIPTION", "Task ID", "Task Name", "Timestamp", "Result ID", "Impact",
-                "TITLE_RECOMENDATION", "RECOMENDATION", "TITLE_MITIGATION", "MITIGATION",
-                "TITLE_TEST", "TEST", "TITLE_TEST", "TEST", "TITLE_TEST", "TEST",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE", "TITLE_REFERENCE", "URL_REFERENCE",
-                "TITLE_REFERENCE", "URL_REFERENCE",
-                "BIDs", "CERTs", "Other References"
-            ]
 
             # Criar e inicializar arquivos de saída com headers
             output_files = {}
@@ -472,24 +706,13 @@ def main():
                             v = refs_list[i] if i < len(refs_list) else ""
                             ref_pairs += [v, v]
 
-                        row = (
-                            row[:12]
-                            + cve_cols
-                            + [epss_score, description]
-                            + row[13:18]
-                            + [title_recomendation, row[18]]
-                            + [title_mitigation,   row[19]]
-                            + [title_test_c20,     row[20]]
-                            + [title_test_c21,     row[21]]
-                            + [title_test_c22,     row[22]]
+                        src = row[:]  # snapshot do input (antes de qualquer alteração)
 
-                            + ref_pairs
+                        epss_enabled = ('EPSS' in os.environ)
+                        out = build_out_row_from_openvas_src(src, epss_data, epss_enabled)
 
-                            + row[23:]
-                        )
+                        output_files[output_file_number]['writer'].writerow(["OpenVAS"] + out)
 
-                        # Escrever no arquivo de saída correto
-                        output_files[output_file_number]['writer'].writerow(["OpenVAS"] + row)
 
                 print(f"Report {file_path} processado com sucesso.\n")
 
