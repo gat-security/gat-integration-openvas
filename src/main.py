@@ -297,7 +297,6 @@ def build_out_row_from_openvas_src(
     src = [safe_str(x) for x in src]
 
 
-    # =============== Normalizações do que você já fazia ===============
     # Severity "Log" vira "INFO"
     severity = src[5].strip() if len(src) > 5 else ""
     if severity == "Log":
@@ -312,19 +311,19 @@ def build_out_row_from_openvas_src(
     if not protocol:
         protocol = "tcp"
 
-    # montar descrição (Summary + Specific Result + Impact) como você fazia
+    # montar descrição (Summary + Specific Result + Impact)
     summary = src[9] if len(src) > 9 else ""
     specific_result = src[10] if len(src) > 10 else ""
     impact_text = src[17] if len(src) > 17 else ""
     description = "\n".join(x for x in [summary, specific_result, impact_text] if str(x).strip())
 
-    # adicionar (Impact/Insights/Method) no summary (igual seu código)
+    # adicionar (Impact/Insights/Method) no summary
     vulnerability_insights = f"<br/><br/>Vulnerability Insights: {src[20]}" if len(src) > 20 and src[20] else ""
     vulnerability_method   = f"<br/><br/>Vulnerability Detection Method: {src[21]}" if len(src) > 21 and src[21] else ""
     impact_info            = f"<br/><br/>Impact: {impact_text}" if impact_text else ""
     summary_augmented = f"{summary}{impact_info}{vulnerability_insights}{vulnerability_method}"
 
-    # CVEs em 25 colunas (seu header tem 25 CVE_LIST repetidos)
+    # CVEs em 25 colunas
     cves_raw = src[12] if len(src) > 12 else ""
     cve_list = split_csv_list(cves_raw)
     cve_cols = (cve_list + [""] * 25)[:25]
@@ -341,7 +340,7 @@ def build_out_row_from_openvas_src(
     ref_pairs: list[str] = []
     for idx in range(25):
         v = refs_list[idx] if idx < len(refs_list) else ""
-        # title=url=mesmo valor (seu padrão)
+        # title=url=mesmo valor
         ref_pairs.extend([v, v])
 
     # Titles truncados 100
@@ -423,7 +422,6 @@ def build_out_row_from_openvas_src(
 
     # Task ID..Impact (5 colunas)
     # No seu slice antigo era row[13:18] => 5 colunas.
-    # Aqui vou manter src[13..17] por compatibilidade com o que você fazia.
     out[FIXED_HEADER.index("Task ID") - 1]   = (src[13].strip() if len(src) > 13 else "")
     out[FIXED_HEADER.index("Task Name") - 1] = (src[14].strip() if len(src) > 14 else "")
     out[FIXED_HEADER.index("Timestamp") - 1] = (src[15].strip() if len(src) > 15 else "")
@@ -472,7 +470,6 @@ def build_out_row_from_openvas_src(
     for k in range(max_ref_slots):
         out[ref_start + k] = ref_pairs[k]
 
-    # últimos campos
     out[bids_idx]  = (src[25].strip() if len(src) > 25 else "")
     out[certs_idx] = (src[26].strip() if len(src) > 26 else "")
     out[other_idx] = (src[27].strip() if len(src) > 27 else "")
