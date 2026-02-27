@@ -21,10 +21,10 @@ A integração do GAT Core com o Greenbone Community Edition e a inclusão de da
 - Docker (https://docs.docker.com/engine/install/)
 - Docker Compose (https://docs.docker.com/compose/install/)
 
-### Recomendado
-- CPU Cores: 4
-- Random-Access Memory: 8Gb
-- Hard Disk: 60Gb
+### Hardware Recomendado
+- CPU: 4 núcleos
+- Memória: 12Gb
+- Armazenamento: 200 Gb (SSD ou NVMe)
 
 ## Documentação do Greenbone Community (antigo Openvas)
 https://greenbone.github.io/docs/latest/22.4/container/index.html
