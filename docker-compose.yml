@@ -1,59 +1,87 @@
+name: greenbone-community-edition
+
 services:
   vulnerability-tests:
-    image: greenbone/vulnerability-tests
+    image: registry.community.greenbone.net/community/vulnerability-tests
     environment:
-      STORAGE_PATH: /var/lib/openvas/22.04/vt-data/nasl
+      FEED_RELEASE: "24.10"
     volumes:
       - vt_data_vol:/mnt
 
   notus-data:
-    image: greenbone/notus-data
+    image: registry.community.greenbone.net/community/notus-data
+    environment:
+      KEEP_ALIVE: 1
     volumes:
       - notus_data_vol:/mnt
 
   scap-data:
-    image: greenbone/scap-data
+    image: registry.community.greenbone.net/community/scap-data
+    environment:
+      KEEP_ALIVE: 1
     volumes:
       - scap_data_vol:/mnt
 
   cert-bund-data:
-    image: greenbone/cert-bund-data
+    image: registry.community.greenbone.net/community/cert-bund-data
+    environment:
+      KEEP_ALIVE: 1
     volumes:
       - cert_data_vol:/mnt
 
   dfn-cert-data:
-    image: greenbone/dfn-cert-data
+    image: registry.community.greenbone.net/community/dfn-cert-data
+    environment:
+      KEEP_ALIVE: 1
     volumes:
       - cert_data_vol:/mnt
     depends_on:
-      - cert-bund-data
+      cert-bund-data:
+        condition: service_healthy
 
   data-objects:
-    image: greenbone/data-objects
+    image: registry.community.greenbone.net/community/data-objects
+    environment:
+      FEED_RELEASE: "24.10"
+      KEEP_ALIVE: 1
     volumes:
       - data_objects_vol:/mnt
 
   report-formats:
-    image: greenbone/report-formats
+    image: registry.community.greenbone.net/community/report-formats
+    environment:
+      FEED_RELEASE: "24.10"
+      KEEP_ALIVE: 1
     volumes:
       - data_objects_vol:/mnt
     depends_on:
-      - data-objects
+      data-objects:
+        condition: service_healthy
 
   gpg-data:
-    image: greenbone/gpg-data
+    image: registry.community.greenbone.net/community/gpg-data
     volumes:
       - gpg_data_vol:/mnt
 
   redis-server:
-    image: greenbone/redis-server
+    image: registry.community.greenbone.net/community/redis-server
     restart: on-failure
     volumes:
       - redis_socket_vol:/run/redis/
 
   pg-gvm:
-    image: greenbone/pg-gvm:stable
-    restart: on-failure
+    image: registry.community.greenbone.net/community/pg-gvm:stable
+    restart: on-failure:10
+    volumes:
+      - psql_data_vol:/var/lib/postgresql
+      - psql_socket_vol:/var/run/postgresql
+    depends_on:
+      pg-gvm-migrator:
+        condition: service_completed_successfully
+
+  pg-gvm-migrator:
+    image: registry.community.greenbone.net/community/pg-gvm-migrator:stable
+    restart: no
     volumes:
       - psql_data_vol:/var/lib/postgresql
       - psql_socket_vol:/var/run/postgresql
@@ -64,6 +92,7 @@ services:
       dockerfile: Dockerfile.gvmd
     restart: on-failure
     volumes:
+      - ./src:/app
       - gvmd_data_vol:/var/lib/gvm
       - scap_data_vol:/var/lib/gvm/scap-data/
       - cert_data_vol:/var/lib/gvm/cert-data
@@ -73,11 +102,13 @@ services:
       - gvmd_socket_vol:/run/gvmd
       - ospd_openvas_socket_vol:/run/ospd
       - psql_socket_vol:/var/run/postgresql
-      - ./src:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       OPENVAS_USERNAME: "${OPENVAS_USERNAME}"
       OPENVAS_PASSWORD: "${OPENVAS_PASSWORD}"
       GAT_URL: "${GAT_URL}"
+      GAT_BASE_PATH: "${GAT_BASE_PATH}"
       GAT_TOKEN: "${GAT_TOKEN}"
       ONPREMISE: "${ONPREMISE}"
       EXECUTE_NOW: "${EXECUTE_NOW}"
@@ -87,38 +118,99 @@ services:
       TIMEZONE: "${TIMEZONE}"
       QOD: "${QOD}"
       EPSS: "${EPSS}"
+      GREENBONE_HOSTS_FILE: "${GREENBONE_HOSTS_FILE}"
+      ASSETS_PAGE_SIZE: "${ASSETS_PAGE_SIZE}"
+      FILTER_TAG_ID: "${FILTER_TAG_ID}"
     depends_on:
       pg-gvm:
         condition: service_started
       scap-data:
-        condition: service_completed_successfully
+        condition: service_healthy
       cert-bund-data:
-        condition: service_completed_successfully
+        condition: service_healthy
       dfn-cert-data:
-        condition: service_completed_successfully
+        condition: service_healthy
       data-objects:
-        condition: service_completed_successfully
+        condition: service_healthy
       report-formats:
-        condition: service_completed_successfully
+        condition: service_healthy
 
   gsa:
-    image: greenbone/gsa:stable
+    image: registry.community.greenbone.net/community/gsa:stable
     restart: on-failure
     ports:
-      - 127.0.0.1:9392:80
+      - "0.0.0.0:9392:80"
     volumes:
       - gvmd_socket_vol:/run/gvmd
     depends_on:
-      - gvmd
+      gvmd:
+        condition: service_started
+
+  configure-openvas:
+    image: registry.community.greenbone.net/community/openvas-scanner:stable
+    volumes:
+      - openvas_data_vol:/mnt
+      - openvas_log_data_vol:/var/log/openvas
+    command:
+      - /bin/sh
+      - -c
+      - |
+        printf "table_driven_lsc = yes\nopenvasd_server = http://openvasd:80\n" > /mnt/openvas.conf
+        sed "s/127/128/" /etc/openvas/openvas_log.conf | sed 's/gvm/openvas/' > /mnt/openvas_log.conf
+        chmod 644 /mnt/openvas.conf
+        chmod 644 /mnt/openvas_log.conf
+        touch /var/log/openvas/openvas.log
+        chmod 666 /var/log/openvas/openvas.log
+
+  openvas:
+    image: registry.community.greenbone.net/community/openvas-scanner:stable
+    restart: on-failure
+    volumes:
+      - openvas_data_vol:/etc/openvas
+      - openvas_log_data_vol:/var/log/openvas
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cat /etc/openvas/openvas.conf
+        tail -f /var/log/openvas/openvas.log
+    depends_on:
+      configure-openvas:
+        condition: service_completed_successfully
+
+  openvasd:
+    image: registry.community.greenbone.net/community/openvas-scanner:stable
+    restart: on-failure
+    environment:
+      OPENVASD_MODE: service_notus
+      GNUPGHOME: /etc/openvas/gnupg
+      LISTENING: "0.0.0.0:80"
+    volumes:
+      - openvas_data_vol:/etc/openvas
+      - openvas_log_data_vol:/var/log/openvas
+      - gpg_data_vol:/etc/openvas/gnupg
+      - notus_data_vol:/var/lib/notus
+    depends_on:
+      vulnerability-tests:
+        condition: service_completed_successfully
+      notus-data:
+        condition: service_healthy
+      configure-openvas:
+        condition: service_completed_successfully
+      gpg-data:
+        condition: service_completed_successfully
+    networks:
+      default:
+        aliases:
+          - openvasd
 
   ospd-openvas:
-    image: greenbone/ospd-openvas:stable
+    image: registry.community.greenbone.net/community/ospd-openvas:stable
     restart: on-failure
     hostname: ospd-openvas.local
-    network_mode: host
     cap_add:
-      - NET_ADMIN # for capturing packages in promiscuous mode
-      - NET_RAW # for raw sockets e.g. used for the boreas alive detection
+      - NET_ADMIN
+      - NET_RAW
     security_opt:
       - seccomp=unconfined
       - apparmor=unconfined
@@ -128,12 +220,10 @@ services:
         "-f",
         "--config",
         "/etc/gvm/ospd-openvas.conf",
-        "--mqtt-broker-address",
-        "mqtt-broker",
         "--notus-feed-dir",
         "/var/lib/notus/advisories",
         "-m",
-        "666"
+        "666",
       ]
     volumes:
       - gpg_data_vol:/etc/openvas/gnupg
@@ -141,46 +231,36 @@ services:
       - notus_data_vol:/var/lib/notus
       - ospd_openvas_socket_vol:/run/ospd
       - redis_socket_vol:/run/redis/
+      - openvas_data_vol:/etc/openvas/
+      - openvas_log_data_vol:/var/log/openvas
     depends_on:
       redis-server:
         condition: service_started
       gpg-data:
         condition: service_completed_successfully
-      vulnerability-tests:
+      configure-openvas:
         condition: service_completed_successfully
-
-  mqtt-broker:
-    restart: on-failure
-    image: greenbone/mqtt-broker
-    networks:
-      default:
-        aliases:
-          - mqtt-broker
-          - broker
-
-  notus-scanner:
-    restart: on-failure
-    image: greenbone/notus-scanner:stable
-    volumes:
-      - notus_data_vol:/var/lib/notus
-      - gpg_data_vol:/etc/openvas/gnupg
-    environment:
-      NOTUS_SCANNER_MQTT_BROKER_ADDRESS: mqtt-broker
-      NOTUS_SCANNER_PRODUCTS_DIRECTORY: /var/lib/notus/products
-    depends_on:
-      - mqtt-broker
-      - gpg-data
-      - vulnerability-tests
+      notus-data:
+        condition: service_healthy
 
   gvm-tools:
-    image: greenbone/gvm-tools
+    image: registry.community.greenbone.net/community/gvm-tools:stable
     volumes:
       - gvmd_socket_vol:/run/gvmd
       - ospd_openvas_socket_vol:/run/ospd
     depends_on:
       - gvmd
       - ospd-openvas
-    
+
+  greenbone-feed-sync:
+    image: registry.community.greenbone.net/community/greenbone-feed-sync
+    volumes:
+      - vt_data_vol:/var/lib/openvas/plugins
+      - notus_data_vol:/var/lib/notus
+      - gvmd_data_vol:/var/lib/gvm
+      - scap_data_vol:/var/lib/gvm/scap-data
+      - cert_data_vol:/var/lib/gvm/cert-data
+      - data_objects_vol:/var/lib/gvm/data-objects/gvmd
 
 volumes:
   gpg_data_vol:
@@ -195,3 +275,6 @@ volumes:
   gvmd_socket_vol:
   ospd_openvas_socket_vol:
   redis_socket_vol:
+  openvas_data_vol:
+  openvas_log_data_vol:
+
