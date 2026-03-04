@@ -169,7 +169,7 @@ def build_gat_endpoint(connection):
         base_path = "/" + raw_base_path.lstrip("/")
         base_path = base_path.rstrip("/")
     else:
-        base_path = ""
+        base_path = "/app"
 
     # --- base url ---
     raw_url = (connection.gat_url or "").strip().rstrip("/")
