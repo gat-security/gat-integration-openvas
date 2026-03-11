@@ -139,7 +139,7 @@ services:
     image: registry.community.greenbone.net/community/gsa:stable
     restart: on-failure
     ports:
-      - "0.0.0.0:9392:80"
+      - "0.0.0.0:9392:9392"
     volumes:
       - gvmd_socket_vol:/run/gvmd
     depends_on:
